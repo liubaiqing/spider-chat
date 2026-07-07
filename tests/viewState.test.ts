@@ -15,6 +15,7 @@ const settings: BranchChatMapSettings = {
   includeParentContext: true,
   includeFullContext: false,
   streamResponses: true,
+  onboardingCardDismissed: false,
 };
 
 function createViewState(initialMap: ChatMap): ViewState {

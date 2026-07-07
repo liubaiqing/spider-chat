@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { App } from "obsidian";
 import { displayTitle, roleLabel, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
+import { OnboardingCard } from "./OnboardingCard";
+import type { OnboardingGuideVariant } from "./onboarding";
 
 interface NodeDetailsProps {
   app: App;
+  mapTitle: string;
   node: ChatNode;
   parent?: ChatNode;
   path: ChatNode[];
@@ -16,13 +19,16 @@ interface NodeDetailsProps {
   isPending: boolean;
   canUseAi: boolean;
   language: AppLanguage;
+  onboardingVariant: OnboardingGuideVariant | null;
   streamingContent: string;
   onCancel(this: void): void;
   onCreateChild(this: void): void;
   onDeleteNode(this: void, nodeId: NodeId): void;
+  onDismissOnboarding(this: void): void;
   onDraftChange(this: void, value: string): void;
   onGoParent(this: void): void;
   onMarkUnderstood(this: void): void;
+  onRevealNode(this: void, nodeId: NodeId): void;
   onRetry(this: void): void;
   onSend(this: void): void;
   onSummarize(this: void): void;
@@ -30,8 +36,13 @@ interface NodeDetailsProps {
   onTitleChange(this: void, title: string): void;
 }
 
+function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return event.nativeEvent.isComposing || event.keyCode === 229;
+}
+
 export function NodeDetails({
   app,
+  mapTitle,
   node,
   parent,
   path,
@@ -42,13 +53,16 @@ export function NodeDetails({
   isPending,
   canUseAi,
   language,
+  onboardingVariant,
   streamingContent,
   onCancel,
   onCreateChild,
   onDeleteNode,
+  onDismissOnboarding,
   onDraftChange,
   onGoParent,
   onMarkUnderstood,
+  onRevealNode,
   onRetry,
   onSend,
   onSummarize,
@@ -118,20 +132,34 @@ export function NodeDetails({
 
   return (
     <aside className="bcm-detail">
-      {path.length > 1 ? (
-        <div className="bcm-path">
-          {path.slice(0, -1).map((item, index) => (
-            <span key={item.id}>
-              {index > 0 ? <span className="bcm-path-sep"> / </span> : null}
-              {displayTitle(language, item.title)}
-            </span>
-          ))}
+      <header className="bcm-context-header">
+        <div className="bcm-map-context">
+          <span className="bcm-context-label">{t(language, "mapNameLabel")}</span>
+          <span className="bcm-map-title">{displayTitle(language, mapTitle)}</span>
         </div>
-      ) : null}
+        <div className="bcm-context-current" title={t(language, "currentNodeLabel")}>
+          {displayTitle(language, node.title)}
+        </div>
+        {path.length > 1 ? (
+          <nav className="bcm-path" aria-label={t(language, "explorationPath")}>
+            <span className="bcm-context-label">{t(language, "explorationPath")}</span>
+            <div className="bcm-breadcrumbs">
+              {path.slice(0, -1).map((item, index) => (
+                <span className="bcm-breadcrumb-part" key={item.id}>
+                  {index > 0 ? <span className="bcm-path-sep">/</span> : null}
+                  <button className="bcm-breadcrumb-button" type="button" onClick={() => onRevealNode(item.id)}>
+                    {displayTitle(language, item.title)}
+                  </button>
+                </span>
+              ))}
+            </div>
+          </nav>
+        ) : null}
+      </header>
 
       <div className="bcm-scroll-area" ref={scrollRef} onScroll={updateScrollState}>
-        <div className="bcm-node-card">
-          <div className="bcm-node-card-header">
+        <div className="bcm-node-toolbar">
+          <div className="bcm-node-toolbar-main">
             <input
               className="bcm-node-title-input"
               value={titleDraft}
@@ -158,8 +186,13 @@ export function NodeDetails({
         {node.anchorText ? (
           <section className="bcm-context-strip bcm-anchor">
             <span>{t(language, "anchor")}</span>
+            <div className="bcm-source-hint">{t(language, "selectedSourceHint")}</div>
             <MarkdownContent app={app} markdown={node.anchorText} sourcePath={sourcePath} className="bcm-context-markdown" />
           </section>
+        ) : null}
+
+        {onboardingVariant === "child" ? (
+          <OnboardingCard language={language} variant="child" onDismiss={onDismissOnboarding} />
         ) : null}
 
         {node.summary ? (
@@ -171,11 +204,7 @@ export function NodeDetails({
 
         {node.messages.length === 0 && !streamingContent ? (
           <div className="bcm-empty">
-            {language === "zh-CN" ? (
-              <>按 <kbd>Tab</kbd> 创建子节点，或输入问题后按 <kbd>Enter</kbd> 发送。</>
-            ) : (
-              <>Press <kbd>Tab</kbd> to create a child node, or type a question here and press <kbd>Enter</kbd>.</>
-            )}
+            {t(language, "emptyHint")}
           </div>
         ) : (
           <>
@@ -193,6 +222,12 @@ export function NodeDetails({
                   <span className="bcm-caret" />
                 </div>
               </article>
+            ) : null}
+            {onboardingVariant === "branch" ? (
+              <OnboardingCard language={language} variant="branch" onDismiss={onDismissOnboarding} />
+            ) : null}
+            {onboardingVariant === "done" ? (
+              <OnboardingCard language={language} variant="done" onDismiss={onDismissOnboarding} />
             ) : null}
           </>
         )}
@@ -224,6 +259,9 @@ export function NodeDetails({
       ) : null}
 
       <div className="bcm-composer">
+        {onboardingVariant === "ask" ? (
+          <OnboardingCard language={language} variant="ask" onDismiss={onDismissOnboarding} />
+        ) : null}
         <textarea
           ref={inputRef}
           data-branch-chat-input="true"
@@ -231,7 +269,7 @@ export function NodeDetails({
           placeholder={t(language, "composerPlaceholder")}
           onChange={(e) => onDraftChange(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
               e.preventDefault();
               onSend();
             }

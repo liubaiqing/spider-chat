@@ -6,9 +6,10 @@ interface MarkdownContentProps {
   markdown: string;
   sourcePath: string;
   className?: string;
+  onRendered?: () => void;
 }
 
-export function MarkdownContent({ app, markdown, sourcePath, className }: MarkdownContentProps): ReactElement {
+export function MarkdownContent({ app, markdown, sourcePath, className, onRendered }: MarkdownContentProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,15 +22,19 @@ export function MarkdownContent({ app, markdown, sourcePath, className }: Markdo
     component.load();
     root.replaceChildren();
 
-    void MarkdownRenderer.render(app, markdown, root, sourcePath, component).catch(() => {
-      root.textContent = markdown;
-    });
+    void MarkdownRenderer.render(app, markdown, root, sourcePath, component)
+      .catch(() => {
+        root.textContent = markdown;
+      })
+      .finally(() => {
+        onRendered?.();
+      });
 
     return () => {
       component.unload();
       root.replaceChildren();
     };
-  }, [app, markdown, sourcePath]);
+  }, [app, markdown, onRendered, sourcePath]);
 
   return <div className={className} ref={rootRef} />;
 }

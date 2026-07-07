@@ -14,6 +14,7 @@ const settings: BranchChatMapSettings = {
   includeParentContext: true,
   includeFullContext: false,
   streamResponses: true,
+  onboardingCardDismissed: false,
 };
 
 function streamFromText(value: string): ReadableStream<Uint8Array> {

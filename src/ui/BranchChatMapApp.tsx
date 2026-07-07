@@ -143,9 +143,13 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
   const createChild = useCallback(
     (anchorText?: string) => {
       const doc = activeDocument;
-      viewState.createChild(anchorText?.trim() || getSelectionInside(rootRef.current, doc));
+      const selectedText = anchorText?.trim() || getSelectionInside(rootRef.current, doc);
+      viewState.createChild(selectedText);
+      if (selectedText) {
+        new Notice(t(language, "onboardingChildCreatedNotice"));
+      }
     },
-    [viewState],
+    [language, viewState],
   );
 
   const handleKeydown = useCallback(
@@ -279,14 +283,14 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
         if (e.shiftKey) {
           viewState.goToParent();
         } else {
-          viewState.createChild(getSelectionInside(container, doc) || undefined);
+          createChild(getSelectionInside(container, doc));
         }
       }
     };
 
     doc.addEventListener("keydown", onKeyDown, { capture: true });
     return () => doc.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [plugin.settings.useTabToCreateChildNodes, viewState]);
+  }, [createChild, plugin.settings.useTabToCreateChildNodes, viewState]);
 
   if (!map || !activeNode) {
     return (
@@ -371,6 +375,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           ) : null}
         </div>
         <GraphCanvas
+          app={plugin.app}
           map={map}
           activeNodeId={activeNode.id}
           collapsedIds={collapsedIds}

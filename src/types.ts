@@ -58,6 +58,7 @@ export interface BranchChatMapSettings {
   includeParentContext: boolean;
   includeFullContext: boolean;
   streamResponses: boolean;
+  onboardingCardDismissed: boolean;
   lastOpenedMapId?: string;
 }
 

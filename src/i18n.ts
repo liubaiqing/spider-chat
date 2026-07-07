@@ -17,8 +17,15 @@ export type TranslationKey =
   | "untitledQuestionTitle"
   | "loading"
   | "newChild"
+  | "mapNameLabel"
+  | "explorationPath"
+  | "currentNodeLabel"
+  | "selectedSourceHint"
   | "mapStats"
   | "nodeStats"
+  | "branchesCount"
+  | "branchSource"
+  | "nodeSummaryLabel"
   | "autoLayout"
   | "export"
   | "deleteMap"
@@ -65,6 +72,18 @@ export type TranslationKey =
   | "emptyAiResponse"
   | "streamUnavailable"
   | "generationStoppedWithPartial"
+  | "onboardingCardLabel"
+  | "onboardingAskTitle"
+  | "onboardingAskBody"
+  | "onboardingBranchTitle"
+  | "onboardingBranchBody"
+  | "onboardingChildTitle"
+  | "onboardingChildBody"
+  | "onboardingDoneTitle"
+  | "onboardingDoneBody"
+  | "onboardingDismiss"
+  | "onboardingFinishButton"
+  | "onboardingChildCreatedNotice"
   | "settingsTitle"
   | "settingLanguageName"
   | "settingLanguageDesc"
@@ -85,7 +104,11 @@ export type TranslationKey =
   | "settingStreamName"
   | "settingStreamDesc"
   | "settingAutoSummaryName"
-  | "settingAutoSummaryDesc";
+  | "settingAutoSummaryDesc"
+  | "settingOnboardingName"
+  | "settingOnboardingDesc"
+  | "settingOnboardingButton"
+  | "settingOnboardingRestored";
 
 type TranslationDictionary = Record<TranslationKey, string>;
 
@@ -106,8 +129,15 @@ const zh: TranslationDictionary = {
   untitledQuestionTitle: "未命名问题",
   loading: "正在加载 spider...",
   newChild: "新建子节点",
+  mapNameLabel: "图谱",
+  explorationPath: "探索路径",
+  currentNodeLabel: "当前节点",
+  selectedSourceHint: "来自上一节点选中的原文",
   mapStats: "{nodes} 个节点 · 当前第 {depth} 层",
   nodeStats: "{messages} 条消息 · {children} 个子节点",
+  branchesCount: "{count} 分支",
+  branchSource: "追问来源",
+  nodeSummaryLabel: "结论",
   autoLayout: "自动布局",
   export: "导出",
   deleteMap: "删除图谱",
@@ -133,8 +163,8 @@ const zh: TranslationDictionary = {
   statusArchived: "已归档",
   nodeMessages: "节点消息",
   streaming: "生成中",
-  emptyHint: "按 Tab 创建子节点，或输入问题后按 Enter 发送。",
-  composerPlaceholder: "输入当前节点的问题。Enter 发送，Shift + Enter 换行，Tab 创建子节点。",
+  emptyHint: "先输入一个问题。AI 回复后，选中一句想深入的内容，按 Tab 创建分支。",
+  composerPlaceholder: "问这个节点的问题。Enter 发送，Shift + Enter 换行。",
   send: "发送",
   stop: "停止",
   retry: "重试",
@@ -154,6 +184,18 @@ const zh: TranslationDictionary = {
   emptyAiResponse: "AI 返回为空。",
   streamUnavailable: "当前接口没有返回可读取的流。",
   generationStoppedWithPartial: "已停止生成，已保存当前部分回复。",
+  onboardingCardLabel: "Spider 引导卡片",
+  onboardingAskTitle: "从一个问题开始",
+  onboardingAskBody: "先问一个根问题。Spider 会把这次探索固定成图谱里的起点。",
+  onboardingBranchTitle: "把关键句拉成分支",
+  onboardingBranchBody: "看到想深入的一句？选中它，按 Tab 创建分支。",
+  onboardingChildTitle: "继续追问这段原文",
+  onboardingChildBody: "这个子节点已带入选中的原文。现在直接追问它。",
+  onboardingDoneTitle: "很棒哦，做得好，欢迎来到 Spider",
+  onboardingDoneBody: "你已经完成核心流程。点击关闭结束引导；之后也可以在设置里重新显示。",
+  onboardingDismiss: "隐藏引导",
+  onboardingFinishButton: "关闭",
+  onboardingChildCreatedNotice: "已从选中文本创建子节点",
   settingsTitle: "spider",
   settingLanguageName: "界面语言",
   settingLanguageDesc: "切换插件界面语言。切换后当前设置页会立即刷新。",
@@ -175,6 +217,10 @@ const zh: TranslationDictionary = {
   settingStreamDesc: "开启后 AI 回复会边生成边显示。",
   settingAutoSummaryName: "自动总结节点",
   settingAutoSummaryDesc: "每次 AI 回复后生成一句简短节点总结。",
+  settingOnboardingName: "新手引导卡片",
+  settingOnboardingDesc: "重新显示右侧面板里的 Spider 核心操作提示。",
+  settingOnboardingButton: "重新显示",
+  settingOnboardingRestored: "新手引导卡片已恢复。",
 };
 
 const en: TranslationDictionary = {
@@ -194,8 +240,15 @@ const en: TranslationDictionary = {
   untitledQuestionTitle: "Untitled question",
   loading: "Loading spider...",
   newChild: "New child",
+  mapNameLabel: "Map",
+  explorationPath: "Exploration path",
+  currentNodeLabel: "Current node",
+  selectedSourceHint: "From selected text in the parent node",
   mapStats: "{nodes} nodes · depth {depth}",
   nodeStats: "{messages} messages · {children} children",
+  branchesCount: "{count} branches",
+  branchSource: "Branch source",
+  nodeSummaryLabel: "Summary",
   autoLayout: "Auto layout",
   export: "Export",
   deleteMap: "Delete map",
@@ -221,8 +274,8 @@ const en: TranslationDictionary = {
   statusArchived: "Archived",
   nodeMessages: "Node messages",
   streaming: "Generating",
-  emptyHint: "Press Tab to create a child node, or type a question and press Enter.",
-  composerPlaceholder: "Ask this node. Enter sends, Shift + Enter adds a line, Tab creates a child.",
+  emptyHint: "Start with one question. After the AI replies, select a phrase and press Tab to branch.",
+  composerPlaceholder: "Ask this node. Enter sends, Shift + Enter adds a line.",
   send: "Send",
   stop: "Stop",
   retry: "Retry",
@@ -242,6 +295,18 @@ const en: TranslationDictionary = {
   emptyAiResponse: "AI response was empty.",
   streamUnavailable: "The API did not return a readable stream.",
   generationStoppedWithPartial: "Generation stopped. The partial response was saved.",
+  onboardingCardLabel: "Spider guide card",
+  onboardingAskTitle: "Start with one question",
+  onboardingAskBody: "Ask a root question first. Spider anchors this exploration as the starting point of the map.",
+  onboardingBranchTitle: "Branch from the useful phrase",
+  onboardingBranchBody: "Found a useful phrase? Select it and press Tab to branch.",
+  onboardingChildTitle: "Follow up on this source text",
+  onboardingChildBody: "This child node carries the selected source text. Ask your follow-up here.",
+  onboardingDoneTitle: "Nice work. Welcome to Spider",
+  onboardingDoneBody: "You have completed the core flow. Click Close to finish the guide; you can show it again from settings.",
+  onboardingDismiss: "Hide guide",
+  onboardingFinishButton: "Close",
+  onboardingChildCreatedNotice: "Created a child node from selection",
   settingsTitle: "spider",
   settingLanguageName: "Interface language",
   settingLanguageDesc: "Switch the plugin interface language. The settings page refreshes immediately.",
@@ -263,6 +328,10 @@ const en: TranslationDictionary = {
   settingStreamDesc: "Show AI responses as they are generated.",
   settingAutoSummaryName: "Auto-summarize nodes",
   settingAutoSummaryDesc: "Generate a short summary after each AI response.",
+  settingOnboardingName: "Onboarding guide cards",
+  settingOnboardingDesc: "Show the Spider core workflow hints in the right panel again.",
+  settingOnboardingButton: "Show again",
+  settingOnboardingRestored: "Onboarding guide cards restored.",
 };
 
 const dictionaries: Record<AppLanguage, TranslationDictionary> = {

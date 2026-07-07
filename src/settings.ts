@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: BranchChatMapSettings = {
   includeParentContext: true,
   includeFullContext: false,
   streamResponses: true,
+  onboardingCardDismissed: false,
 };
 
 export class BranchChatMapSettingTab extends PluginSettingTab {
@@ -182,6 +183,20 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.autoSummarizeNodes = value;
             await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(t(language, "settingOnboardingName"))
+      .setDesc(t(language, "settingOnboardingDesc"))
+      .addButton((button) => {
+        button
+          .setButtonText(t(language, "settingOnboardingButton"))
+          .onClick(async () => {
+            this.plugin.settings.onboardingCardDismissed = false;
+            await this.plugin.saveSettings();
+            window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: false } }));
+            new Notice(t(language, "settingOnboardingRestored"));
           });
       });
   }

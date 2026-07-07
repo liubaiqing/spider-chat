@@ -85,6 +85,7 @@ interface ExportLabels {
   dataReadmeUsage: string;
   edgeCount: string;
   exportedPackage: string;
+  explorationPath: string;
   fileStructure: string;
   fullConversationHint: string;
   graphHome: string;
@@ -138,6 +139,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       dataReadmeUsage: "The JSON file contains the complete local Spider map: nodes, edges, messages, positions, timestamps, and status values.",
       edgeCount: "Edge count",
       exportedPackage: "spider export package",
+      explorationPath: "Exploration path",
       fileStructure: "File structure",
       fullConversationHint: "Start at the root question, follow arrows for child questions, and open each Markdown file for the full conversation.",
       graphHome: "Map home",
@@ -190,6 +192,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     dataReadmeUsage: "JSON 文件包含完整的本地 Spider 图谱：节点、连线、消息、位置、时间戳和状态。",
     edgeCount: "连线数量",
     exportedPackage: "spider 导出包",
+    explorationPath: "探索路径",
     fileStructure: "文件结构",
     fullConversationHint: "从根问题开始，沿箭头阅读每个子问题。节点卡片只展示摘要，完整对话请打开对应 Markdown 文件。",
     graphHome: "图谱首页",
@@ -299,6 +302,18 @@ function depthOf(map: ChatMap, node: ChatNode): number {
   return depth;
 }
 
+function pathOf(map: ChatMap, node: ChatNode): ChatNode[] {
+  const path: ChatNode[] = [];
+  let cursor: ChatNode | undefined = node;
+
+  while (cursor) {
+    path.unshift(cursor);
+    cursor = cursor.parentId ? map.nodes[cursor.parentId] : undefined;
+  }
+
+  return path;
+}
+
 function nodeFileName(index: number, node: ChatNode): string {
   return `${String(index + 1).padStart(2, "0")}-${slugifyFileName(node.title)}.md`;
 }
@@ -386,6 +401,7 @@ function renderNodeMarkdown(
   const parent = node.parentId ? map.nodes[node.parentId] : undefined;
   const parentFileName = parent ? nodeFileNames?.get(parent.id) : undefined;
   const children = node.children.map((childId) => map.nodes[childId]).filter((child): child is ChatNode => Boolean(child));
+  const path = pathOf(map, node);
 
   lines.push(`${nodeHeading(depth)} ${node.title}`);
   lines.push("");
@@ -412,6 +428,11 @@ function renderNodeMarkdown(
   } else {
     lines.push(`- ${labels.parent}: ${labels.noParentRoot}`);
   }
+  const pathLinks = path.map((pathNode) => {
+    const pathFileName = nodeFileNames?.get(pathNode.id);
+    return pathFileName && pathNode.id !== node.id ? markdownLink(pathNode.title, pathFileName) : pathNode.title;
+  });
+  lines.push(`- ${labels.explorationPath}: ${pathLinks.join(" / ")}`);
   if (children.length > 0) {
     const childLinks = children.map((child) => {
       const fileName = nodeFileNames?.get(child.id) ?? `${slugifyFileName(child.title)}.md`;

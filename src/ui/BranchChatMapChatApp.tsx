@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
 import { displayTitle, t } from "../i18n";
@@ -7,6 +7,7 @@ import type { BranchChatMapController } from "./BranchChatMapApp";
 import { getSelectionInside } from "./BranchChatMapApp";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
 import { useActiveViewState } from "./useBranchChatMapState";
+import { getOnboardingGuideVariant } from "./onboarding";
 
 interface BranchChatMapChatAppProps {
   plugin: BranchChatMapPlugin;
@@ -20,17 +21,42 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
   const node = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const parent = node?.parentId && map ? map.nodes[node.parentId] : undefined;
   const language = plugin.settings.language;
+  const [onboardingDismissed, setOnboardingDismissed] = useState(plugin.settings.onboardingCardDismissed);
 
   const viewState = plugin.store.getActiveSession();
 
   const path = viewState?.getActivePath() ?? [];
+  const onboardingVariant = getOnboardingGuideVariant(map, node, onboardingDismissed);
+
+  const dismissOnboarding = useCallback(() => {
+    plugin.settings.onboardingCardDismissed = true;
+    setOnboardingDismissed(true);
+    void plugin.saveSettings();
+    window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: true } }));
+  }, [plugin]);
+
+  useEffect(() => {
+    const handleOnboardingChange = (event: Event) => {
+      const nextDismissed = (event as CustomEvent<{ dismissed?: boolean }>).detail?.dismissed;
+      if (typeof nextDismissed === "boolean") {
+        setOnboardingDismissed(nextDismissed);
+      }
+    };
+
+    window.addEventListener("spider-onboarding-card-change", handleOnboardingChange);
+    return () => window.removeEventListener("spider-onboarding-card-change", handleOnboardingChange);
+  }, []);
 
   const createChild = useCallback(
     (anchorText?: string) => {
       const doc = activeDocument;
-      viewState?.createChild(anchorText?.trim() || getSelectionInside(rootRef.current, doc));
+      const selectedText = anchorText?.trim() || getSelectionInside(rootRef.current, doc);
+      viewState?.createChild(selectedText);
+      if (selectedText) {
+        new Notice(t(language, "onboardingChildCreatedNotice"));
+      }
     },
-    [viewState],
+    [language, viewState],
   );
 
   const handleDeleteCurrentMap = useCallback(async () => {
@@ -207,14 +233,14 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         if (e.shiftKey) {
           viewState?.goToParent();
         } else {
-          viewState?.createChild(getSelectionInside(container, doc) || undefined);
+          createChild(getSelectionInside(container, doc));
         }
       }
     };
 
     doc.addEventListener("keydown", onKeyDown, { capture: true });
     return () => doc.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [plugin.settings.useTabToCreateChildNodes, viewState]);
+  }, [createChild, plugin.settings.useTabToCreateChildNodes, viewState]);
 
   if (!node) {
     return (
@@ -228,11 +254,9 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
 
   return (
     <div className="bcm-sidebar-root" ref={rootRef}>
-      <div className="bcm-chat-map-name">
-        {map ? displayTitle(language, map.title) : ""}
-      </div>
       <NodeDetails
         app={plugin.app}
+        mapTitle={map ? map.title : ""}
         node={node}
         parent={parent}
         path={path}
@@ -243,13 +267,16 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         isPending={pendingNodeId === node.id}
         canUseAi={Boolean(plugin.settings.apiKey && plugin.settings.model)}
         language={language}
+        onboardingVariant={onboardingVariant}
         streamingContent={streamingContent[node.id] ?? ""}
         onCancel={() => vs?.cancelGeneration()}
         onCreateChild={() => createChild()}
         onDeleteNode={(nodeId) => { void confirmAndDeleteNode(nodeId); }}
+        onDismissOnboarding={dismissOnboarding}
         onDraftChange={(value) => vs?.updateDraft(node.id, value)}
         onGoParent={() => vs?.goToParent()}
         onMarkUnderstood={() => vs?.markUnderstood()}
+        onRevealNode={(nodeId) => vs?.revealNode(nodeId)}
         onRetry={() => void vs?.retryAssistant()}
         onSend={() => void vs?.sendMessage()}
         onSummarize={() => void vs?.summarizeCurrentNode()}

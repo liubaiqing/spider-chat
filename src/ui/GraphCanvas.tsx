@@ -7,17 +7,21 @@ import {
   ReactFlow,
   ReactFlowProvider,
   applyNodeChanges,
+  useUpdateNodeInternals,
   type Edge,
   type Node,
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useState, type ReactElement } from "react";
-import { displayTitle, statusLabel } from "../i18n";
+import type { App } from "obsidian";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, NodeId } from "../types";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface BranchNodeData {
   [key: string]: unknown;
+  app: App;
   node: ChatNode;
   active: boolean;
   inPath: boolean;
@@ -31,32 +35,72 @@ interface BranchNodeData {
 type BranchFlowNode = Node<BranchNodeData, "branchNode">;
 
 const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>) {
+  const updateNodeInternals = useUpdateNodeInternals();
   const statusLabelText = statusLabel(data.language, data.node.status);
+  const hasSummary = Boolean(data.node.summary?.trim());
+  const hasAnchor = Boolean(data.node.anchorText?.trim());
+  const branchLabel = t(data.language, "branchesCount", { count: data.childCount });
+  const sourcePath = `spider/${data.node.id}.md`;
+  const handleMarkdownRendered = useCallback((): void => {
+    window.requestAnimationFrame(() => updateNodeInternals(data.node.id));
+  }, [data.node.id, updateNodeInternals]);
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => updateNodeInternals(data.node.id));
+  }, [data.childCount, data.language, data.node.anchorText, data.node.id, data.node.summary, data.node.title, updateNodeInternals]);
+
   return (
     <div
       className={`bcm-graph-node ${data.active ? "is-active" : ""} ${data.inPath ? "is-path" : ""} ${
         data.node.status === "understood" ? "is-understood" : ""
+      } ${
+        data.node.status === "archived" ? "is-archived" : ""
       } ${data.searchMatch ? "is-search-match" : ""}`}
     >
       <Handle type="target" position={Position.Left} />
-      <div className="bcm-node-header">
-        <span className="bcm-node-status">{statusLabelText}</span>
+      <div className="bcm-node-meta">
+        <span className="bcm-node-status">
+          <span className="bcm-node-status-dot" aria-hidden="true" />
+          {statusLabelText}
+        </span>
         {data.childCount > 0 ? (
           <button
-            className="bcm-node-toggle"
+            className="bcm-node-branch-count"
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               data.onToggleCollapse(data.node.id);
             }}
           >
-            {data.collapsed ? `+${data.childCount}` : data.childCount}
+            {data.collapsed ? `+${branchLabel}` : branchLabel}
           </button>
         ) : null}
       </div>
       <div className="bcm-node-title">{displayTitle(data.language, data.node.title)}</div>
-      {data.node.summary ? <div className="bcm-node-summary">{data.node.summary}</div> : null}
-      {data.node.anchorText ? <div className="bcm-node-anchor">{data.node.anchorText}</div> : null}
+      {hasSummary ? (
+        <div className="bcm-node-summary">
+          <span className="bcm-node-section-label">{t(data.language, "nodeSummaryLabel")}</span>
+          <MarkdownContent
+            app={data.app}
+            markdown={data.node.summary ?? ""}
+            sourcePath={sourcePath}
+            className="bcm-node-summary-markdown markdown-rendered"
+            onRendered={handleMarkdownRendered}
+          />
+        </div>
+      ) : null}
+      {hasAnchor ? (
+        <div className="bcm-node-source">
+          <span className="bcm-node-section-label">{t(data.language, "branchSource")}</span>
+          <MarkdownContent
+            app={data.app}
+            markdown={data.node.anchorText ?? ""}
+            sourcePath={sourcePath}
+            className="bcm-node-source-markdown markdown-rendered"
+            onRendered={handleMarkdownRendered}
+          />
+        </div>
+      ) : null}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -67,6 +111,7 @@ const nodeTypes = {
 };
 
 interface GraphCanvasProps {
+  app: App;
   map: ChatMap;
   activeNodeId: NodeId;
   collapsedIds: Set<NodeId>;
@@ -113,6 +158,7 @@ function collectActivePathIds(map: ChatMap, activeNodeId: NodeId): Set<NodeId> {
 }
 
 function GraphCanvasInner({
+  app,
   map,
   activeNodeId,
   collapsedIds,
@@ -134,6 +180,7 @@ function GraphCanvasInner({
         position: node.position,
         data: {
           node,
+          app,
           active: node.id === activeNodeId,
           inPath: activePathIds.has(node.id),
           collapsed: collapsedIds.has(node.id),
@@ -143,7 +190,7 @@ function GraphCanvasInner({
           onToggleCollapse,
         },
       }));
-  }, [activeNodeId, activePathIds, collapsedIds, language, map.nodes, onToggleCollapse, searchMatchIds, visibleIds]);
+  }, [activeNodeId, activePathIds, app, collapsedIds, language, map.nodes, onToggleCollapse, searchMatchIds, visibleIds]);
 
   const computedEdges = useMemo<Edge[]>(() => {
     return map.edges

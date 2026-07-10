@@ -24,7 +24,7 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 |---|---|---|
 | Mid-answer, want to drill into a term | Copy-paste → new window → lose the original thread | Select text → `Tab` → child node carries the context |
 | Want to compare 3 phrasings of the same question | Open 3 tabs and alt-tab | Same parent, 3 children, side-by-side |
-| Done exploring, want it as notes | Copy-paste into a note, links break | One-click export to Markdown + Canvas + Mermaid |
+| Done exploring, want it as notes | Copy-paste into a note, links break | Add personal node notes, then export Markdown + Canvas |
 | Want AI to live inside your docs, not a separate tab | Constant window switching | Stay in Obsidian the entire time |
 
 > **vs Copilot plugin**: Copilot is a single-thread chatbot. Spider is a multi-thread **knowledge graph** — same topic, Copilot gives you one line, Spider gives you one tree.
@@ -55,6 +55,7 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 - **Collapse / expand subtrees** to keep large maps clean
 - **Auto-layout** via Dagre algorithm with active-path highlighting
 - **Drag nodes** — positions persist, the canvas looks the way you left it
+- **Personal node notes** — hover the pencil for a preview, click to pin and edit with autosave
 
 ### 📦 One-Click Structured Export
 

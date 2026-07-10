@@ -358,6 +358,20 @@ export class ViewState {
     this.commitMap(updateNode(map, activeNodeId, { status }));
   }
 
+  updateNodeNote(nodeId: NodeId, note: string): void {
+    const { map } = this.state;
+    if (!map?.nodes[nodeId]) {
+      return;
+    }
+
+    const normalizedNote = note.trim() ? note.trimEnd() : undefined;
+    if ((map.nodes[nodeId]?.note ?? undefined) === normalizedNote) {
+      return;
+    }
+
+    this.commitMap(updateNode(map, nodeId, { note: normalizedNote }));
+  }
+
   updatePosition(nodeId: NodeId, position: { x: number; y: number }): void {
     const { map } = this.state;
     if (!map) {
@@ -421,6 +435,7 @@ export class ViewState {
       .map((node) => {
         const haystack = [
           node.title,
+          node.note ?? "",
           node.summary ?? "",
           node.anchorText ?? "",
           ...node.messages.map((message) => message.content),

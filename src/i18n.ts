@@ -26,6 +26,16 @@ export type TranslationKey =
   | "branchesCount"
   | "branchSource"
   | "nodeSummaryLabel"
+  | "nodeNote"
+  | "addNodeNote"
+  | "editNodeNote"
+  | "nodeNotePlaceholder"
+  | "nodeNoteEmpty"
+  | "noteSaving"
+  | "noteSaved"
+  | "closeNodeNote"
+  | "hasAnchorText"
+  | "hasAiSummary"
   | "autoLayout"
   | "export"
   | "deleteMap"
@@ -138,6 +148,16 @@ const zh: TranslationDictionary = {
   branchesCount: "{count} 分支",
   branchSource: "追问来源",
   nodeSummaryLabel: "结论",
+  nodeNote: "我的笔记",
+  addNodeNote: "添加节点笔记",
+  editNodeNote: "编辑节点笔记",
+  nodeNotePlaceholder: "记录你的判断、结论或待办，支持 Markdown。",
+  nodeNoteEmpty: "点击记录你对这个节点的判断或结论。",
+  noteSaving: "保存中…",
+  noteSaved: "已自动保存",
+  closeNodeNote: "关闭节点笔记",
+  hasAnchorText: "有原文",
+  hasAiSummary: "有 AI 总结",
   autoLayout: "自动布局",
   export: "导出",
   deleteMap: "删除图谱",
@@ -147,7 +167,7 @@ const zh: TranslationDictionary = {
   confirmDeleteNode: "确认删除当前节点？此操作不可撤销。",
   confirmDeleteSubtree: "确认删除当前节点及其 {count} 个子节点？此操作不可撤销。",
   searchNodes: "搜索节点",
-  searchPlaceholder: "搜索标题、摘要、锚点或消息",
+  searchPlaceholder: "搜索标题、笔记、摘要、锚点或消息",
   searchNoResults: "没有找到匹配节点",
   updatedAt: "更新于 {time}",
   nodesCount: "{count} 个节点",
@@ -249,6 +269,16 @@ const en: TranslationDictionary = {
   branchesCount: "{count} branches",
   branchSource: "Branch source",
   nodeSummaryLabel: "Summary",
+  nodeNote: "My note",
+  addNodeNote: "Add node note",
+  editNodeNote: "Edit node note",
+  nodeNotePlaceholder: "Capture your judgment, conclusion, or next step. Markdown is supported.",
+  nodeNoteEmpty: "Click to record your judgment or conclusion for this node.",
+  noteSaving: "Saving…",
+  noteSaved: "Autosaved",
+  closeNodeNote: "Close node note",
+  hasAnchorText: "Has source",
+  hasAiSummary: "Has AI summary",
   autoLayout: "Auto layout",
   export: "Export",
   deleteMap: "Delete map",
@@ -258,7 +288,7 @@ const en: TranslationDictionary = {
   confirmDeleteNode: "Delete the current node? This cannot be undone.",
   confirmDeleteSubtree: "Delete the current node and its {count} child nodes? This cannot be undone.",
   searchNodes: "Search nodes",
-  searchPlaceholder: "Search titles, summaries, anchors, or messages",
+  searchPlaceholder: "Search titles, notes, summaries, anchors, or messages",
   searchNoResults: "No matching nodes",
   updatedAt: "Updated {time}",
   nodesCount: "{count} nodes",

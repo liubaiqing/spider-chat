@@ -72,4 +72,19 @@ describe("ViewState", () => {
     expect(vs.searchNodes("vector").map((result) => result.node.id)).toContain(child.child.id);
     expect(vs.searchNodes("")).toEqual([]);
   });
+
+  it("stores and searches a personal node note without touching the AI summary", () => {
+    const stableMap = createRootMap("Notes");
+    const vs = createViewState(stableMap);
+
+    vs.updateNodeNote(stableMap.rootNodeId, "这是我自己的研究判断");
+
+    const node = vs.getSnapshot().map?.nodes[stableMap.rootNodeId];
+    expect(node?.note).toBe("这是我自己的研究判断");
+    expect(node?.summary).toBeUndefined();
+    expect(vs.searchNodes("研究判断").map((result) => result.node.id)).toContain(stableMap.rootNodeId);
+
+    vs.updateNodeNote(stableMap.rootNodeId, "   ");
+    expect(vs.getSnapshot().map?.nodes[stableMap.rootNodeId]?.note).toBeUndefined();
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanText, escapeMermaid, slugifyFileName, truncateText } from "../src/utils/text";
+import { cleanText, escapeMermaid, markdownToPlainText, slugifyFileName, truncateText } from "../src/utils/text";
 
 describe("text utilities", () => {
   it("collapses whitespace and trims surrounding space", () => {
@@ -9,6 +9,11 @@ describe("text utilities", () => {
   it("truncates long strings with an ellipsis", () => {
     expect(truncateText("alpha beta gamma", 8)).toBe("alpha b…");
     expect(truncateText("short", 12)).toBe("short");
+  });
+
+  it("turns Markdown into a compact plain-text preview", () => {
+    expect(markdownToPlainText("## 结论\n- **软件实现**\n- [`API`](https://example.com)"))
+      .toBe("结论 软件实现 API");
   });
 
   it("slugs unsafe characters for filenames", () => {

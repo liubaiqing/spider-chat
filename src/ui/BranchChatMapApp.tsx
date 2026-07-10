@@ -10,7 +10,7 @@ import { MapSwitcherModal } from "./MapSwitcherModal";
 import { MapGallery } from "./MapGallery";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
 import type { ViewState } from "../state/viewState";
-import type { ChatMapId } from "../types";
+import type { ChatMapId, NodeId } from "../types";
 
 export interface BranchChatMapController {
   handleKeydown(this: void, event: KeyboardEvent): void;
@@ -152,8 +152,17 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     [language, viewState],
   );
 
+  const handleNoteChange = useCallback((nodeId: NodeId, note: string) => {
+    viewState.updateNodeNote(nodeId, note);
+  }, [viewState]);
+
   const handleKeydown = useCallback(
     (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-spider-note-editor='true']")) {
+        return;
+      }
+
       const tag = (event.target as Node)?.nodeName;
       const isInput = tag === "INPUT" || tag === "TEXTAREA";
 
@@ -266,6 +275,10 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     const doc = activeDocument;
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (doc.activeElement?.closest("[data-spider-note-editor='true']")) {
+        return;
+      }
+
       if (e.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const container = rootRef.current;
         if (!container) return;
@@ -374,13 +387,13 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           ) : null}
         </div>
         <GraphCanvas
-          app={plugin.app}
           map={map}
           activeNodeId={activeNode.id}
           collapsedIds={collapsedIds}
           language={language}
           searchMatchIds={searchMatchIds}
           onActivateNode={(nodeId) => viewState.setActiveNode(nodeId)}
+          onNoteChange={handleNoteChange}
           onToggleCollapse={(nodeId) => viewState.toggleCollapse(nodeId)}
           onPositionChange={(nodeId, position) => viewState.updatePosition(nodeId, position)}
         />

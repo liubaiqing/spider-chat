@@ -11,6 +11,20 @@ export function truncateText(value: string, maxLength: number): string {
   return `${clean.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
 }
 
+export function markdownToPlainText(value: string): string {
+  return cleanText(
+    value
+      .replace(/```[\s\S]*?```/g, " 代码 ")
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+      .replace(/^\s*>\s?/gm, "")
+      .replace(/^\s*(?:[-+*]|\d+\.)\s+/gm, "")
+      .replace(/[|]/g, " · ")
+      .replace(/[*_~`]/g, ""),
+  );
+}
+
 export function escapeMermaid(value: string): string {
   return cleanText(value)
     .replaceAll("\\", "\\\\")

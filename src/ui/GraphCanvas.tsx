@@ -7,21 +7,19 @@ import {
   ReactFlow,
   ReactFlowProvider,
   applyNodeChanges,
-  useUpdateNodeInternals,
   type Edge,
   type Node,
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import type { App } from "obsidian";
-import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { memo, useEffect, useMemo, useState, type ReactElement } from "react";
 import { displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, NodeId } from "../types";
-import { MarkdownContent } from "./MarkdownContent";
+import { markdownToPlainText, truncateText } from "../utils/text";
+import { NodeNotePopover } from "./NodeNotePopover";
 
 interface BranchNodeData {
   [key: string]: unknown;
-  app: App;
   node: ChatNode;
   active: boolean;
   inPath: boolean;
@@ -29,25 +27,24 @@ interface BranchNodeData {
   childCount: number;
   language: AppLanguage;
   searchMatch: boolean;
+  notePinned: boolean;
+  onActivateNode(nodeId: NodeId): void;
+  onPinnedNoteChange(nodeId: NodeId | null): void;
+  onNoteChange(nodeId: NodeId, note: string): void;
   onToggleCollapse(nodeId: NodeId): void;
 }
 
 type BranchFlowNode = Node<BranchNodeData, "branchNode">;
 
 const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>) {
-  const updateNodeInternals = useUpdateNodeInternals();
   const statusLabelText = statusLabel(data.language, data.node.status);
+  const hasNote = Boolean(data.node.note?.trim());
   const hasSummary = Boolean(data.node.summary?.trim());
   const hasAnchor = Boolean(data.node.anchorText?.trim());
   const branchLabel = t(data.language, "branchesCount", { count: data.childCount });
-  const sourcePath = `spider/${data.node.id}.md`;
-  const handleMarkdownRendered = useCallback((): void => {
-    window.requestAnimationFrame(() => updateNodeInternals(data.node.id));
-  }, [data.node.id, updateNodeInternals]);
-
-  useEffect(() => {
-    window.requestAnimationFrame(() => updateNodeInternals(data.node.id));
-  }, [data.childCount, data.language, data.node.anchorText, data.node.id, data.node.summary, data.node.title, updateNodeInternals]);
+  const previewContent = data.node.note?.trim() || data.node.summary?.trim();
+  const previewLabel = hasNote ? t(data.language, "nodeNote") : t(data.language, "nodeSummaryLabel");
+  const previewText = previewContent ? truncateText(markdownToPlainText(previewContent), 180) : "";
 
   return (
     <div
@@ -63,42 +60,44 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
           <span className="bcm-node-status-dot" aria-hidden="true" />
           {statusLabelText}
         </span>
-        {data.childCount > 0 ? (
-          <button
-            className="bcm-node-branch-count"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onToggleCollapse(data.node.id);
-            }}
-          >
-            {data.collapsed ? `+${branchLabel}` : branchLabel}
-          </button>
-        ) : null}
-      </div>
-      <div className="bcm-node-title">{displayTitle(data.language, data.node.title)}</div>
-      {hasSummary ? (
-        <div className="bcm-node-summary">
-          <span className="bcm-node-section-label">{t(data.language, "nodeSummaryLabel")}</span>
-          <MarkdownContent
-            app={data.app}
-            markdown={data.node.summary ?? ""}
-            sourcePath={sourcePath}
-            className="bcm-node-summary-markdown markdown-rendered"
-            onRendered={handleMarkdownRendered}
+        <div className="bcm-node-meta-actions">
+          <NodeNotePopover
+            nodeId={data.node.id}
+            note={data.node.note}
+            language={data.language}
+            pinned={data.notePinned}
+            preferLeft={!data.node.parentId}
+            onActivate={data.onActivateNode}
+            onPinnedChange={data.onPinnedNoteChange}
+            onNoteChange={data.onNoteChange}
           />
+          {data.childCount > 0 ? (
+            <button
+              className="bcm-node-branch-count"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onToggleCollapse(data.node.id);
+              }}
+            >
+              {data.collapsed ? `+${branchLabel}` : branchLabel}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="bcm-node-title" title={displayTitle(data.language, data.node.title)}>
+        {displayTitle(data.language, data.node.title)}
+      </div>
+      {previewText ? (
+        <div className={`bcm-node-preview ${hasNote ? "is-note" : "is-summary"}`}>
+          <span className="bcm-node-section-label">{previewLabel}</span>
+          <div className="bcm-node-preview-text" title={previewText}>{previewText}</div>
         </div>
       ) : null}
-      {hasAnchor ? (
-        <div className="bcm-node-source">
-          <span className="bcm-node-section-label">{t(data.language, "branchSource")}</span>
-          <MarkdownContent
-            app={data.app}
-            markdown={data.node.anchorText ?? ""}
-            sourcePath={sourcePath}
-            className="bcm-node-source-markdown markdown-rendered"
-            onRendered={handleMarkdownRendered}
-          />
+      {hasAnchor || (hasNote && hasSummary) ? (
+        <div className="bcm-node-signals">
+          {hasAnchor ? <span>{t(data.language, "hasAnchorText")}</span> : null}
+          {hasNote && hasSummary ? <span>{t(data.language, "hasAiSummary")}</span> : null}
         </div>
       ) : null}
       <Handle type="source" position={Position.Right} />
@@ -111,13 +110,13 @@ const nodeTypes = {
 };
 
 interface GraphCanvasProps {
-  app: App;
   map: ChatMap;
   activeNodeId: NodeId;
   collapsedIds: Set<NodeId>;
   language: AppLanguage;
   searchMatchIds?: Set<NodeId>;
   onActivateNode(this: void, nodeId: NodeId): void;
+  onNoteChange(this: void, nodeId: NodeId, note: string): void;
   onToggleCollapse(this: void, nodeId: NodeId): void;
   onPositionChange(this: void, nodeId: NodeId, position: { x: number; y: number }): void;
 }
@@ -158,18 +157,19 @@ function collectActivePathIds(map: ChatMap, activeNodeId: NodeId): Set<NodeId> {
 }
 
 function GraphCanvasInner({
-  app,
   map,
   activeNodeId,
   collapsedIds,
   language,
   searchMatchIds,
   onActivateNode,
+  onNoteChange,
   onToggleCollapse,
   onPositionChange,
 }: GraphCanvasProps): ReactElement {
   const visibleIds = useMemo(() => collectVisibleNodeIds(map, collapsedIds), [collapsedIds, map]);
   const activePathIds = useMemo(() => collectActivePathIds(map, activeNodeId), [activeNodeId, map]);
+  const [pinnedNoteNodeId, setPinnedNoteNodeId] = useState<NodeId | null>(null);
 
   const computedNodes = useMemo<BranchFlowNode[]>(() => {
     return Object.values(map.nodes)
@@ -180,17 +180,20 @@ function GraphCanvasInner({
         position: node.position,
         data: {
           node,
-          app,
           active: node.id === activeNodeId,
           inPath: activePathIds.has(node.id),
           collapsed: collapsedIds.has(node.id),
           childCount: node.children.length,
           language,
           searchMatch: searchMatchIds?.has(node.id) ?? false,
+          notePinned: pinnedNoteNodeId === node.id,
+          onActivateNode,
+          onPinnedNoteChange: setPinnedNoteNodeId,
+          onNoteChange,
           onToggleCollapse,
         },
       }));
-  }, [activeNodeId, activePathIds, app, collapsedIds, language, map.nodes, onToggleCollapse, searchMatchIds, visibleIds]);
+  }, [activeNodeId, activePathIds, collapsedIds, language, map.nodes, onActivateNode, onNoteChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
 
   const computedEdges = useMemo<Edge[]>(() => {
     return map.edges
@@ -226,7 +229,11 @@ function GraphCanvasInner({
         fitViewOptions={{ padding: 0.24 }}
         minZoom={0.18}
         maxZoom={1.7}
-        onNodeClick={(_event, node) => onActivateNode(node.id)}
+        onNodeClick={(_event, node) => {
+          setPinnedNoteNodeId(null);
+          onActivateNode(node.id);
+        }}
+        onPaneClick={() => setPinnedNoteNodeId(null)}
         onNodeDragStop={(_event, node) => onPositionChange(node.id, node.position)}
         onNodesChange={(changes: NodeChange<BranchFlowNode>[]) => {
           setNodes((current) => applyNodeChanges(changes, current));

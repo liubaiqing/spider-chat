@@ -21,6 +21,7 @@ export interface ChatNode {
   sourceMessageId?: MessageId;
   messages: ChatMessage[];
   summary?: string;
+  note?: string;
   status: ChatNodeStatus;
   position: {
     x: number;

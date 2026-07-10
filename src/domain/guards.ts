@@ -43,6 +43,7 @@ export function isChatNode(value: unknown): value is ChatNode {
     Array.isArray(value.messages) &&
     value.messages.every(isChatMessage) &&
     (value.summary === undefined || isString(value.summary)) &&
+    (value.note === undefined || isString(value.note)) &&
     (value.status === "open" || value.status === "understood" || value.status === "archived") &&
     isPosition(value.position) &&
     isStringArray(value.children) &&

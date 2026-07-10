@@ -99,6 +99,11 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
 
   const handleKeydown = useCallback(
     (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-spider-note-editor='true']")) {
+        return;
+      }
+
       if (event.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
@@ -216,6 +221,10 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
     const doc = activeDocument;
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (doc.activeElement?.closest("[data-spider-note-editor='true']")) {
+        return;
+      }
+
       if (e.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const container = rootRef.current;
         if (!container) return;

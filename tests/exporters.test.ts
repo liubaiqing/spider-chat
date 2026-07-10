@@ -95,4 +95,19 @@ describe("exporters", () => {
     expect(index?.content).toContain("No conversation yet");
     expect(canvas.nodes.some((node) => node.type === "text" && node.text.includes("Overview"))).toBe(true);
   });
+
+  it("exports personal notes as first-class research findings", () => {
+    const map = createRootMap("Research notes");
+    const notedMap = updateNode(map, map.rootNodeId, {
+      note: "我的判断：先验证核心假设，再扩展实现。",
+      summary: "AI 生成的总结。",
+    });
+    const files = buildExportFiles(notedMap);
+    const brief = files.find((file) => file.path === "brief.md");
+    const rootNode = files.find((file) => file.path.startsWith("nodes/01-"));
+
+    expect(brief?.content).toContain("我的判断：先验证核心假设，再扩展实现。");
+    expect(rootNode?.content).toContain("> [!note] 我的笔记");
+    expect(rootNode?.content).toContain("AI 生成的总结。");
+  });
 });

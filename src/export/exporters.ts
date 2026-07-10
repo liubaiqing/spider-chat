@@ -112,6 +112,7 @@ interface ExportLabels {
   openQuestions: string;
   overview: string;
   parent: string;
+  personalNote: string;
   question: string;
   quickInfo: string;
   rawData: string;
@@ -171,6 +172,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       openQuestions: "Open questions",
       overview: "Overview",
       parent: "Parent",
+      personalNote: "My note",
       question: "Question",
       quickInfo: "Quick info",
       rawData: "Raw data",
@@ -229,6 +231,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     openQuestions: "待研究问题",
     overview: "总览",
     parent: "父节点",
+    personalNote: "我的笔记",
     question: "问题",
     quickInfo: "快速信息",
     rawData: "原始数据",
@@ -266,7 +269,7 @@ function firstUserQuestion(node: ChatNode): string | undefined {
 }
 
 function nodeSummaryLine(node: ChatNode, labels: ExportLabels): string {
-  return node.summary || firstUserQuestion(node) || node.anchorText || labels.noSummary;
+  return node.note || node.summary || firstUserQuestion(node) || node.anchorText || labels.noSummary;
 }
 
 function formatDateTime(value: string): string {
@@ -400,7 +403,10 @@ function buildResearchBrief(
   const understood = nodes.filter((node) => node.status === "understood");
   const open = nodes.filter((node) => node.status === "open");
   const archived = nodes.filter((node) => node.status === "archived");
-  const findings = understood.filter((node) => node.summary?.trim());
+  const personalFindings = nodes.filter((node) => node.note?.trim());
+  const findings = personalFindings.length > 0
+    ? personalFindings
+    : understood.filter((node) => node.summary?.trim());
 
   const lines = [
     `# ${map.title} · ${labels.researchBrief}`,
@@ -424,7 +430,7 @@ function buildResearchBrief(
       ? findings.map((node) => {
         const fileName = nodeFileNames.get(node.id);
         const title = fileName ? markdownLink(node.title, `nodes/${fileName}`) : node.title;
-        return `- **${title}** — ${node.summary?.trim()}`;
+        return `- **${title}** — ${(node.note || node.summary)?.trim()}`;
       })
       : [`- ${labels.noSummary}`]),
     "",
@@ -486,7 +492,10 @@ function renderNodeMarkdown(
   lines.push("");
   lines.push(`> [!summary] ${node.title}`);
   lines.push(`> ${labels.status}: ${nodeStatusLabel(node, labels)}`);
-  lines.push(`> ${labels.nodeSummary}: ${nodeSummaryLine(node, labels)}`);
+  if (node.note) {
+    lines.push(`> ${labels.personalNote}: ${node.note}`);
+  }
+  lines.push(`> ${labels.nodeSummary}: ${node.summary || firstUserQuestion(node) || node.anchorText || labels.noSummary}`);
   if (node.anchorText) {
     lines.push(`> ${labels.anchor}: ${node.anchorText}`);
   }
@@ -532,6 +541,7 @@ function renderNodeMarkdown(
   }
   lines.push("");
 
+  lines.push(...renderCallout(labels.personalNote, node.note));
   lines.push(...renderCallout(labels.nodeSummary, node.summary));
   lines.push(...renderCallout(labels.anchor, node.anchorText));
 

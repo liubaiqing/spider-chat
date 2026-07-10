@@ -1,8 +1,8 @@
 import * as dagre from "@dagrejs/dagre";
 import type { ChatMap, ChatNode } from "../types";
 
-const NODE_WIDTH = 340;
-const NODE_HEIGHT = 180;
+const NODE_WIDTH = 300;
+const NODE_HEIGHT = 196;
 
 export function applyDagreLayout(map: ChatMap): ChatMap {
   const graph = new dagre.graphlib.Graph();

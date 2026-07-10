@@ -89,7 +89,9 @@ interface ExportLabels {
   fileStructure: string;
   fullConversationHint: string;
   graphHome: string;
+  generatedAt: string;
   indexEntry: string;
+  keyFindings: string;
   languageDepth(depth: number): string;
   mapJson: string;
   mapJsonDescription: string;
@@ -107,14 +109,17 @@ interface ExportLabels {
   nodeSummary: string;
   nodesFolder: string;
   open: string;
+  openQuestions: string;
   overview: string;
   parent: string;
   question: string;
   quickInfo: string;
   rawData: string;
+  researchBrief: string;
   readingRoute: string;
   rootQuestion: string;
   status: string;
+  statusOverview: string;
   system: string;
   updatedAt: string;
   usageAdvice: string;
@@ -143,7 +148,9 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       fileStructure: "File structure",
       fullConversationHint: "Start at the root question, follow arrows for child questions, and open each Markdown file for the full conversation.",
       graphHome: "Map home",
+      generatedAt: "Generated",
       indexEntry: "Obsidian entry note",
+      keyFindings: "Key findings",
       languageDepth: (depth) => `Depth ${depth}`,
       mapJson: "map.json",
       mapJsonDescription: "Raw structured data",
@@ -161,14 +168,17 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       nodeSummary: "Node summary",
       nodesFolder: "One Markdown file per node",
       open: "Open",
+      openQuestions: "Open questions",
       overview: "Overview",
       parent: "Parent",
       question: "Question",
       quickInfo: "Quick info",
       rawData: "Raw data",
+      researchBrief: "Research brief",
       readingRoute: "Recommended reading route",
       rootQuestion: "Root question",
       status: "Status",
+      statusOverview: "Status overview",
       system: "System",
       updatedAt: "Updated",
       usageAdvice: "Reading tips",
@@ -196,7 +206,9 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     fileStructure: "文件结构",
     fullConversationHint: "从根问题开始，沿箭头阅读每个子问题。节点卡片只展示摘要，完整对话请打开对应 Markdown 文件。",
     graphHome: "图谱首页",
+    generatedAt: "生成时间",
     indexEntry: "Obsidian 内的图谱首页",
+    keyFindings: "关键结论",
     languageDepth: (depth) => `第 ${depth} 层`,
     mapJson: "map.json",
     mapJsonDescription: "原始结构化数据",
@@ -214,14 +226,17 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     nodeSummary: "节点总结",
     nodesFolder: "每个节点的完整对话记录",
     open: "进行中",
+    openQuestions: "待研究问题",
     overview: "总览",
     parent: "父节点",
     question: "问题",
     quickInfo: "快速信息",
     rawData: "原始数据",
+    researchBrief: "研究简报",
     readingRoute: "推荐阅读路线",
     rootQuestion: "根问题",
     status: "状态",
+    statusOverview: "进度概览",
     system: "系统",
     updatedAt: "更新时间",
     usageAdvice: "使用建议",
@@ -330,6 +345,10 @@ function markdownLink(label: string, path: string): string {
   return `[${label}](${encodeURI(path).replaceAll("%2F", "/")})`;
 }
 
+function tableCell(value: string): string {
+  return value.replaceAll("|", "\\|").replace(/\r?\n/g, "<br>");
+}
+
 function nodeStatusLabel(node: ChatNode, labels: ExportLabels): string {
   if (node.status === "understood") {
     return labels.understood;
@@ -369,6 +388,64 @@ function truncateForExport(value: string, maxLength: number): string {
   }
 
   return `${clean.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function buildResearchBrief(
+  map: ChatMap,
+  nodes: ChatNode[],
+  labels: ExportLabels,
+  nodeFileNames: ReadonlyMap<string, string>,
+): string {
+  const root = map.nodes[map.rootNodeId];
+  const understood = nodes.filter((node) => node.status === "understood");
+  const open = nodes.filter((node) => node.status === "open");
+  const archived = nodes.filter((node) => node.status === "archived");
+  const findings = understood.filter((node) => node.summary?.trim());
+
+  const lines = [
+    `# ${map.title} · ${labels.researchBrief}`,
+    "",
+    `> [!summary] ${labels.overview}`,
+    `> ${root ? nodeSummaryLine(root, labels) : labels.missingRoot}`,
+    "",
+    `- ${labels.generatedAt}: ${formatDateTime(new Date().toISOString())}`,
+    `- ${labels.nodeCount}: ${nodes.length}`,
+    `- ${labels.edgeCount}: ${map.edges.length}`,
+    "",
+    `## ${labels.statusOverview}`,
+    "",
+    `| ${labels.open} | ${labels.understood} | ${labels.archived} |`,
+    "| ---: | ---: | ---: |",
+    `| ${open.length} | ${understood.length} | ${archived.length} |`,
+    "",
+    `## ${labels.keyFindings}`,
+    "",
+    ...(findings.length > 0
+      ? findings.map((node) => {
+        const fileName = nodeFileNames.get(node.id);
+        const title = fileName ? markdownLink(node.title, `nodes/${fileName}`) : node.title;
+        return `- **${title}** — ${node.summary?.trim()}`;
+      })
+      : [`- ${labels.noSummary}`]),
+    "",
+    `## ${labels.openQuestions}`,
+    "",
+    ...(open.length > 0
+      ? open.map((node) => {
+        const fileName = nodeFileNames.get(node.id);
+        const title = fileName ? markdownLink(node.title, `nodes/${fileName}`) : node.title;
+        return `- ${title}: ${firstUserQuestion(node) || node.anchorText || labels.noConversation}`;
+      })
+      : [`- ${labels.noChildren}`]),
+    "",
+    `## ${labels.navigation}`,
+    "",
+    `- ${labels.graphHome}: ${markdownLink("index.md", "index.md")}`,
+    `- ${labels.canvasView}: ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}`,
+    "",
+  ];
+
+  return lines.join("\n");
 }
 
 function renderCallout(title: string, body?: string): string[] {
@@ -702,6 +779,10 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     return `${indent}- [${node.title}](nodes/${fileName}): ${nodeSummaryLine(node, labels)}`;
   });
   const isConversationEmpty = nodes.every((node) => node.messages.length === 0);
+  const understoodCount = nodes.filter((node) => node.status === "understood").length;
+  const openCount = nodes.filter((node) => node.status === "open").length;
+  const archivedCount = nodes.filter((node) => node.status === "archived").length;
+  const researchBrief = buildResearchBrief(map, nodes, labels, nodeFileNames);
 
   const indexLines = [
     `# ${map.title}`,
@@ -713,15 +794,17 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
     "| Item | Value |",
     "| --- | --- |",
-    `| ${labels.rootQuestion} | ${rootFileName && root ? `[${root.title}](nodes/${rootFileName})` : root?.title ?? labels.missingRoot} |`,
+    `| ${labels.rootQuestion} | ${tableCell(rootFileName && root ? `[${root.title}](nodes/${rootFileName})` : root?.title ?? labels.missingRoot)} |`,
     `| ${labels.nodeCount} | ${nodes.length} |`,
     `| ${labels.edgeCount} | ${map.edges.length} |`,
+    `| ${labels.statusOverview} | ${labels.open} ${openCount} · ${labels.understood} ${understoodCount} · ${labels.archived} ${archivedCount} |`,
     `| ${labels.createdAt} | ${formatDateTime(map.createdAt)} |`,
     `| ${labels.updatedAt} | ${formatDateTime(map.updatedAt)} |`,
     "",
     "## " + labels.indexEntry,
     "",
     `- ${labels.canvasView}: ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}`,
+    `- ${labels.researchBrief}: ${markdownLink("brief.md", "brief.md")}`,
     `- ${labels.mermaid}: ${markdownLink("mindmap.mermaid.md", "diagrams/mindmap.mermaid.md")}`,
     `- ${labels.rawData}: ${markdownLink("map.json", "data/map.json")}`,
     `- ${labels.dataReadmeTitle}: ${markdownLink("README.md", "data/README.md")}`,
@@ -735,6 +818,7 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
     `- \`README.md\`: ${labels.overview}`,
     `- \`index.md\`: ${labels.indexEntry}`,
+    `- \`brief.md\`: ${labels.researchBrief}`,
     `- \`nodes/\`: ${labels.nodesFolder}`,
     `- \`diagrams/mindmap.mermaid.md\`: ${labels.mermaid}`,
     `- \`canvas/map.canvas\`: ${labels.canvasView}`,
@@ -765,6 +849,7 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "## " + labels.indexEntry,
     "",
     `- ${markdownLink("index.md", "index.md")}: ${labels.graphHome}`,
+    `- ${markdownLink("brief.md", "brief.md")}: ${labels.researchBrief}`,
     `- ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}: ${labels.canvasView}`,
     `- ${markdownLink("diagrams/mindmap.mermaid.md", "diagrams/mindmap.mermaid.md")}: ${labels.mermaid}`,
     `- ${markdownLink("data/map.json", "data/map.json")}: ${labels.mapJsonDescription}`,
@@ -799,6 +884,10 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     {
       path: "index.md",
       content: indexContent,
+    },
+    {
+      path: "brief.md",
+      content: researchBrief,
     },
     ...nodes.map((node, index) => ({
       path: `nodes/${nodeFileNames.get(node.id) ?? nodeFileName(index, node)}`,

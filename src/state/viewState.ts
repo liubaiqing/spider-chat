@@ -266,7 +266,7 @@ export class ViewState {
 
       for (const file of files) {
         const path = await this.repository.writeExport(folder, file.path, file.content);
-        if (file.path === "README.md") {
+        if (file.path === "index.md") {
           entryPath = path;
         }
       }

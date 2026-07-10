@@ -308,7 +308,6 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     <div className="bcm-root bcm-root-graph" ref={rootRef}>
       <div className="bcm-topbar">
         <div>
-          <div className="bcm-eyebrow">{t(language, "appName")}</div>
           <div className="bcm-title-row">
             <span
               className="bcm-title-link"

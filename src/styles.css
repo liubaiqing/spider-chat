@@ -35,7 +35,7 @@
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 52px 1fr;
+  grid-template-rows: 58px 1fr;
   overflow: hidden;
   font-family: var(--font-interface);
   color: var(--bcm-text);
@@ -76,10 +76,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  background: color-mix(in srgb, var(--bcm-panel) 90%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  padding: 0 18px;
+  background: var(--bcm-panel);
   box-shadow: 0 1px 0 var(--bcm-border-subtle);
   z-index: 10;
 }
@@ -160,15 +158,6 @@
   color: var(--bcm-danger);
   border-color: color-mix(in srgb, var(--bcm-danger) 30%, var(--bcm-border));
   background: color-mix(in srgb, var(--bcm-danger) 8%, transparent);
-}
-
-.bcm-eyebrow {
-  color: var(--bcm-faint);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-bottom: 2px;
 }
 
 .bcm-title {
@@ -424,8 +413,13 @@
   position: absolute;
   left: 18px;
   top: 18px;
-  width: min(360px, calc(100% - 36px));
+  width: min(248px, calc(100% - 36px));
   z-index: 20;
+  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bcm-search-panel:focus-within {
+  width: min(380px, calc(100% - 36px));
 }
 
 .bcm-search-input {
@@ -435,8 +429,16 @@
   background: var(--bcm-panel);
   color: var(--bcm-text);
   font-size: 13px;
-  padding: 8px 10px;
-  box-shadow: var(--bcm-shadow-sm);
+  padding: 8px 11px 8px 32px;
+  box-shadow: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
+}
+
+.bcm-search-input:focus {
+  border-color: var(--bcm-accent);
+  box-shadow: 0 0 0 2px var(--bcm-accent-soft);
 }
 
 .bcm-search-results {
@@ -493,10 +495,6 @@
   height: 100%;
   border-right: 1px solid var(--bcm-border-subtle);
   background-color: var(--bcm-panel-soft);
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--bcm-border) 30%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--bcm-border) 30%, transparent) 1px, transparent 1px);
-  background-size: 24px 24px;
 }
 
 .bcm-root-graph .bcm-graph {
@@ -517,8 +515,7 @@
   border: 1px solid var(--bcm-border-subtle);
   border-radius: var(--bcm-radius);
   padding: 12px 14px 13px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bcm-panel) 96%, var(--bcm-panel-soft)), var(--bcm-panel));
+  background: var(--bcm-panel);
   box-shadow: 0 1px 3px color-mix(in srgb, rgb(0 0 0), transparent 92%);
   transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
@@ -532,8 +529,7 @@
 
 .bcm-graph-node.is-active {
   border-color: var(--bcm-accent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bcm-panel) 88%, var(--bcm-accent) 12%), var(--bcm-panel));
+  background: color-mix(in srgb, var(--bcm-panel) 94%, var(--bcm-accent) 6%);
   box-shadow: 0 0 0 2px var(--bcm-accent-soft);
 }
 
@@ -622,9 +618,8 @@
 
 .bcm-node-summary {
   margin-top: 9px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bcm-panel-raised) 72%, transparent);
+  padding-top: 8px;
+  border-top: 1px solid var(--bcm-border-subtle);
   color: var(--bcm-muted);
   font-size: 12px;
   line-height: 1.45;
@@ -643,9 +638,8 @@
 .bcm-node-source {
   margin-top: 8px;
   padding: 7px 8px;
-  border: 1px solid var(--bcm-border-subtle);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--bcm-panel) 86%, var(--bcm-panel-soft));
+  background: var(--bcm-panel-soft);
   color: var(--bcm-muted);
   font-size: 12px;
   line-height: 1.45;
@@ -897,8 +891,10 @@
 
 .bcm-context-strip {
   margin: 0 18px 8px;
-  padding: 0 0 0 10px;
-  border-left: 2px solid var(--bcm-accent);
+  padding: 10px 12px;
+  border: 1px solid var(--bcm-border-subtle);
+  border-radius: var(--bcm-radius);
+  background: color-mix(in srgb, var(--bcm-panel) 94%, var(--bcm-accent) 6%);
   color: var(--bcm-text);
   line-height: 1.55;
 }
@@ -909,8 +905,7 @@
   color: var(--bcm-faint);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .bcm-source-hint {

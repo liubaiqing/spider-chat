@@ -55,7 +55,7 @@ describe("exporters", () => {
 
     const files = buildExportFiles(finalMap);
     expect(files.map((file) => file.path)).toEqual(
-      expect.arrayContaining(["README.md", "index.md", "diagrams/mindmap.mermaid.md", "canvas/map.canvas", "data/map.json", "data/README.md"]),
+      expect.arrayContaining(["README.md", "index.md", "brief.md", "diagrams/mindmap.mermaid.md", "canvas/map.canvas", "data/map.json", "data/README.md"]),
     );
 
     const readme = files.find((file) => file.path === "README.md");
@@ -65,6 +65,12 @@ describe("exporters", () => {
     expect(index?.content).toContain("## 快速信息");
     expect(index?.content).toContain("## 推荐阅读路线");
     expect(index?.content).toContain("[canvas/map.canvas](canvas/map.canvas)");
+    expect(index?.content).toContain("[brief.md](brief.md)");
+
+    const brief = files.find((file) => file.path === "brief.md");
+    expect(brief?.content).toContain("## 关键结论");
+    expect(brief?.content).toContain("Embedding maps tokens into vectors.");
+    expect(brief?.content).toContain("## 待研究问题");
 
     const dataReadme = files.find((file) => file.path === "data/README.md");
     expect(dataReadme?.content).toContain("结构化数据");

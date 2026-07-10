@@ -142,6 +142,14 @@ export class MapRepository {
     return path;
   }
 
+  async resetExportFolder(folder: string): Promise<void> {
+    const cleanFolder = normalizePath(folder);
+    if (await this.app.vault.adapter.exists(cleanFolder)) {
+      await this.app.vault.adapter.rmdir(cleanFolder, true);
+    }
+    await this.ensureFolder(cleanFolder);
+  }
+
   private mapPath(map: ChatMap): string {
     return normalizePath(`${DATA_DIR}/${slugifyFileName(map.title)}-${map.id}.json`);
   }

@@ -60,12 +60,10 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 
 ```
 Spider Maps/
-  ├── README.md                 # Package overview
   ├── index.md                  # Obsidian entry-point note
+  ├── brief.md                  # Findings, open questions, and progress
   ├── nodes/                    # One Markdown file per node
-  ├── diagrams/mindmap.mermaid.md
-  ├── canvas/map.canvas         # Visual knowledge map
-  └── data/map.json             # Raw data (re-importable)
+  └── map.canvas                # Visual knowledge map
 ```
 
 - Canvas nodes are color-coded by state (purple = root / green = understood / gray = archived / blue = open)

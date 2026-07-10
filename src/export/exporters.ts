@@ -441,7 +441,7 @@ function buildResearchBrief(
     `## ${labels.navigation}`,
     "",
     `- ${labels.graphHome}: ${markdownLink("index.md", "index.md")}`,
-    `- ${labels.canvasView}: ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}`,
+    `- ${labels.canvasView}: ${markdownLink("map.canvas", "map.canvas")}`,
     "",
   ];
 
@@ -499,7 +499,7 @@ function renderNodeMarkdown(
   lines.push(`## ${labels.navigation}`);
   lines.push("");
   lines.push(`- ${labels.graphHome}: ${markdownLink(map.title, "../index.md")}`);
-  lines.push(`- ${labels.canvasView}: ${markdownLink("map.canvas", "../canvas/map.canvas")}`);
+  lines.push(`- ${labels.canvasView}: ${markdownLink("map.canvas", "../map.canvas")}`);
   if (parent && parentFileName) {
     lines.push(`- ${labels.parent}: ${markdownLink(parent.title, parentFileName)}`);
   } else {
@@ -770,7 +770,6 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
   const root = map.nodes[map.rootNodeId];
   const nodes = walkNodes(map);
   const nodeFileNames = new Map(nodes.map((node, index) => [node.id, nodeFileName(index, node)]));
-  const mindmap = exportMermaidMindmap(map);
   const rootSummary = root ? nodeSummaryLine(root, labels) : labels.missingRoot;
   const rootFileName = root ? nodeFileNames.get(root.id) : undefined;
   const nodeIndexLines = nodes.map((node, index) => {
@@ -803,11 +802,8 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
     "## " + labels.indexEntry,
     "",
-    `- ${labels.canvasView}: ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}`,
+    `- ${labels.canvasView}: ${markdownLink("map.canvas", "map.canvas")}`,
     `- ${labels.researchBrief}: ${markdownLink("brief.md", "brief.md")}`,
-    `- ${labels.mermaid}: ${markdownLink("mindmap.mermaid.md", "diagrams/mindmap.mermaid.md")}`,
-    `- ${labels.rawData}: ${markdownLink("map.json", "data/map.json")}`,
-    `- ${labels.dataReadmeTitle}: ${markdownLink("README.md", "data/README.md")}`,
     "",
     "## " + labels.readingRoute,
     "",
@@ -816,71 +812,19 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
     "## " + labels.fileStructure,
     "",
-    `- \`README.md\`: ${labels.overview}`,
     `- \`index.md\`: ${labels.indexEntry}`,
     `- \`brief.md\`: ${labels.researchBrief}`,
     `- \`nodes/\`: ${labels.nodesFolder}`,
-    `- \`diagrams/mindmap.mermaid.md\`: ${labels.mermaid}`,
-    `- \`canvas/map.canvas\`: ${labels.canvasView}`,
-    `- \`data/map.json\`: ${labels.mapJsonDescription}`,
-    `- \`data/README.md\`: ${labels.dataReadmeTitle}`,
+    `- \`map.canvas\`: ${labels.canvasView}`,
     "",
     "## " + labels.usageAdvice,
     "",
     `- ${labels.fullConversationHint}`,
-    `- ${labels.dataPurpose}`,
-    "",
-    "## " + labels.mermaidPreview,
-    "",
-    "```mermaid",
-    mindmap.trimEnd(),
-    "```",
     "",
   ];
   const indexContent = indexLines.join("\n");
-  const readmeContent = [
-    `# ${map.title}`,
-    "",
-    `> [!summary] ${labels.exportedPackage}`,
-    `> ${rootSummary}`,
-    "",
-    `${labels.fullConversationHint} ${markdownLink("index.md", "index.md")} / ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}`,
-    "",
-    "## " + labels.indexEntry,
-    "",
-    `- ${markdownLink("index.md", "index.md")}: ${labels.graphHome}`,
-    `- ${markdownLink("brief.md", "brief.md")}: ${labels.researchBrief}`,
-    `- ${markdownLink("canvas/map.canvas", "canvas/map.canvas")}: ${labels.canvasView}`,
-    `- ${markdownLink("diagrams/mindmap.mermaid.md", "diagrams/mindmap.mermaid.md")}: ${labels.mermaid}`,
-    `- ${markdownLink("data/map.json", "data/map.json")}: ${labels.mapJsonDescription}`,
-    `- ${markdownLink("data/README.md", "data/README.md")}: ${labels.dataReadmeTitle}`,
-    "",
-  ].join("\n");
-  const dataReadmeContent = [
-    `# ${labels.dataReadmeTitle}`,
-    "",
-    labels.dataReadmeUsage,
-    "",
-    "| Item | Value |",
-    "| --- | --- |",
-    `| ${labels.rootQuestion} | ${root?.title ?? labels.missingRoot} |`,
-    `| Root node ID | ${map.rootNodeId} |`,
-    `| ${labels.nodeCount} | ${nodes.length} |`,
-    `| ${labels.edgeCount} | ${map.edges.length} |`,
-    `| ${labels.createdAt} | ${formatDateTime(map.createdAt)} |`,
-    `| ${labels.updatedAt} | ${formatDateTime(map.updatedAt)} |`,
-    "",
-    `- \`${labels.mapJson}\`: ${labels.mapJsonDescription}`,
-    `- ${labels.dataPurpose}`,
-    isConversationEmpty ? `- ${labels.noConversation}` : "",
-    "",
-  ].filter(Boolean).join("\n");
 
   return [
-    {
-      path: "README.md",
-      content: readmeContent,
-    },
     {
       path: "index.md",
       content: indexContent,
@@ -894,20 +838,8 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
       content: renderNodeMarkdown(map, node, 1, labels, nodeFileNames),
     })),
     {
-      path: "diagrams/mindmap.mermaid.md",
-      content: `# ${map.title} ${labels.mermaidTitleSuffix}\n\n\`\`\`mermaid\n${mindmap}\`\`\`\n`,
-    },
-    {
-      path: "canvas/map.canvas",
+      path: "map.canvas",
       content: exportCanvas(map, options),
-    },
-    {
-      path: "data/map.json",
-      content: `${JSON.stringify(map, null, 2)}\n`,
-    },
-    {
-      path: "data/README.md",
-      content: dataReadmeContent,
     },
   ];
 }

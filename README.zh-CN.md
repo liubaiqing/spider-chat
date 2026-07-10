@@ -60,12 +60,10 @@
 
 ```
 Spider Maps/
-  ├── README.md                 # 包总览
   ├── index.md                  # Obsidian 入口笔记
+  ├── brief.md                  # 关键结论、待研究问题与进度
   ├── nodes/                    # 每个节点一份独立 md
-  ├── diagrams/mindmap.mermaid.md
-  ├── canvas/map.canvas         # 可视化知识图谱
-  └── data/map.json             # 原始数据（可重新导入）
+  └── map.canvas                # 可视化知识图谱
 ```
 
 - Canvas 节点带颜色编码（紫色=根 / 绿色=已理解 / 灰色=已归档 / 蓝色=进行中）

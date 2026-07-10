@@ -54,17 +54,18 @@ describe("exporters", () => {
     );
 
     const files = buildExportFiles(finalMap);
-    expect(files.map((file) => file.path)).toEqual(
-      expect.arrayContaining(["README.md", "index.md", "brief.md", "diagrams/mindmap.mermaid.md", "canvas/map.canvas", "data/map.json", "data/README.md"]),
-    );
-
-    const readme = files.find((file) => file.path === "README.md");
-    expect(readme?.content).toContain("[index.md](index.md)");
+    expect(files.map((file) => file.path)).toEqual([
+      "index.md",
+      "brief.md",
+      expect.stringMatching(/^nodes\/01-/),
+      expect.stringMatching(/^nodes\/02-/),
+      "map.canvas",
+    ]);
 
     const index = files.find((file) => file.path === "index.md");
     expect(index?.content).toContain("## 快速信息");
     expect(index?.content).toContain("## 推荐阅读路线");
-    expect(index?.content).toContain("[canvas/map.canvas](canvas/map.canvas)");
+    expect(index?.content).toContain("[map.canvas](map.canvas)");
     expect(index?.content).toContain("[brief.md](brief.md)");
 
     const brief = files.find((file) => file.path === "brief.md");
@@ -72,20 +73,10 @@ describe("exporters", () => {
     expect(brief?.content).toContain("Embedding maps tokens into vectors.");
     expect(brief?.content).toContain("## 待研究问题");
 
-    const dataReadme = files.find((file) => file.path === "data/README.md");
-    expect(dataReadme?.content).toContain("结构化数据");
-    expect(dataReadme?.content).toContain("| 节点数量 | 2 |");
-
-    const data = files.find((file) => file.path === "data/map.json");
-    expect(JSON.parse(data?.content ?? "{}")).toMatchObject({
-      id: finalMap.id,
-      rootNodeId: finalMap.rootNodeId,
-    });
-
     const rootNode = files.find((file) => file.path.startsWith("nodes/01-"));
     expect(rootNode?.content).toContain("## Canvas 卡片");
     expect(rootNode?.content).toContain("[AI learning](../index.md)");
-    expect(rootNode?.content).toContain("[map.canvas](../canvas/map.canvas)");
+    expect(rootNode?.content).toContain("[map.canvas](../map.canvas)");
     expect(rootNode?.content).toContain("[embedding](02-embedding.md)");
 
     const childNode = files.find((file) => file.path.startsWith("nodes/02-"));
@@ -98,7 +89,7 @@ describe("exporters", () => {
     const map = createRootMap("AI learning");
     const files = buildExportFiles(map, { language: "en" });
     const index = files.find((file) => file.path === "index.md");
-    const canvas = JSON.parse(files.find((file) => file.path === "canvas/map.canvas")?.content ?? "{}") as JsonCanvasFile;
+    const canvas = JSON.parse(files.find((file) => file.path === "map.canvas")?.content ?? "{}") as JsonCanvasFile;
 
     expect(index?.content).toContain("## Quick info");
     expect(index?.content).toContain("No conversation yet");

@@ -264,6 +264,7 @@ export class ViewState {
       const files = buildExportFiles(exportMap, { exportFolder: folder, language: this.plugin.settings.language });
       let entryPath = "";
 
+      await this.repository.resetExportFolder(folder);
       for (const file of files) {
         const path = await this.repository.writeExport(folder, file.path, file.content);
         if (file.path === "index.md") {

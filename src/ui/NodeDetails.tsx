@@ -40,6 +40,22 @@ function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
+function ScrollJumpIcon({ direction }: { direction: "up" | "down" }): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      className={direction === "down" ? "is-down" : undefined}
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+    >
+      <path d="m5 11 7-7 7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m5 18 7-7 7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function NodeDetails({
   app,
   mapTitle,
@@ -157,31 +173,32 @@ export function NodeDetails({
         ) : null}
       </header>
 
-      <div className="bcm-scroll-area" ref={scrollRef} onScroll={updateScrollState}>
-        <div className="bcm-node-toolbar">
-          <div className="bcm-node-toolbar-main">
-            <input
-              className="bcm-node-title-input"
-              value={titleDraft}
-              onBlur={commitTitle}
-              onChange={(e) => setTitleDraft(e.currentTarget.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-            />
-            <select
-              className={`bcm-status bcm-status-${node.status}`}
-              value={node.status}
-              onChange={(e) => onStatusChange(e.currentTarget.value as ChatNodeStatus)}
-              aria-label={language === "zh-CN" ? "节点状态" : "Node status"}
-            >
-              <option value="open">{t(language, "statusOpen")}</option>
-              <option value="understood">{t(language, "statusUnderstood")}</option>
-              <option value="archived">{t(language, "statusArchived")}</option>
-            </select>
+      <div className="bcm-message-area">
+        <div className="bcm-scroll-area" ref={scrollRef} onScroll={updateScrollState}>
+          <div className="bcm-node-toolbar">
+            <div className="bcm-node-toolbar-main">
+              <input
+                className="bcm-node-title-input"
+                value={titleDraft}
+                onBlur={commitTitle}
+                onChange={(e) => setTitleDraft(e.currentTarget.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+              />
+              <select
+                className={`bcm-status bcm-status-${node.status}`}
+                value={node.status}
+                onChange={(e) => onStatusChange(e.currentTarget.value as ChatNodeStatus)}
+                aria-label={language === "zh-CN" ? "节点状态" : "Node status"}
+              >
+                <option value="open">{t(language, "statusOpen")}</option>
+                <option value="understood">{t(language, "statusUnderstood")}</option>
+                <option value="archived">{t(language, "statusArchived")}</option>
+              </select>
+            </div>
+            <div className="bcm-node-facts">
+              {t(language, "nodeStats", { messages: node.messages.length, children: node.children.length })}
+            </div>
           </div>
-          <div className="bcm-node-facts">
-            {t(language, "nodeStats", { messages: node.messages.length, children: node.children.length })}
-          </div>
-        </div>
 
         {node.anchorText ? (
           <section className="bcm-context-strip bcm-anchor">
@@ -232,18 +249,20 @@ export function NodeDetails({
           </>
         )}
 
+        </div>
+
         {showScrollTop ? (
           <button className="bcm-scroll-jump bcm-scroll-top" type="button" onClick={() => scrollToTop()} aria-label={language === "zh-CN" ? "回到顶部" : "Scroll to top"}>
-            ↑
+            <ScrollJumpIcon direction="up" />
+          </button>
+        ) : null}
+
+        {showScrollBottom ? (
+          <button className="bcm-scroll-jump bcm-scroll-bottom" type="button" onClick={() => scrollToBottom()} aria-label={language === "zh-CN" ? "跳到最新消息" : "Jump to latest"}>
+            <ScrollJumpIcon direction="down" />
           </button>
         ) : null}
       </div>
-
-      {showScrollBottom ? (
-        <button className="bcm-scroll-jump bcm-scroll-bottom" type="button" onClick={() => scrollToBottom()} aria-label={language === "zh-CN" ? "跳到最新消息" : "Jump to latest"}>
-          ↓
-        </button>
-      ) : null}
 
       {error ? (
         <div className="bcm-error">

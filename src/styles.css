@@ -413,16 +413,17 @@
   position: absolute;
   left: 18px;
   top: 18px;
-  width: min(248px, calc(100% - 36px));
+  width: clamp(280px, 40%, 420px);
+  max-width: calc(100% - 36px);
   z-index: 20;
-  transition: width 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .bcm-search-panel:focus-within {
-  width: min(380px, calc(100% - 36px));
+  width: clamp(320px, 72%, 560px);
 }
 
 .bcm-search-input {
+  box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--bcm-border-subtle);
   border-radius: 7px;
@@ -442,45 +443,83 @@
 }
 
 .bcm-search-results {
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+  width: 100%;
   margin-top: 6px;
-  max-height: 280px;
-  overflow: auto;
+  max-height: min(360px, 46vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   border: 1px solid var(--bcm-border);
   border-radius: 7px;
   background: var(--bcm-panel);
   box-shadow: var(--bcm-shadow-md);
-  padding: 4px;
+  padding: 5px;
 }
 
-.bcm-search-result {
+.bcm-search-results > .bcm-search-result {
+  appearance: none;
+  box-sizing: border-box;
   width: 100%;
-  display: block;
+  height: auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
   border: 0;
   border-radius: 5px;
   background: transparent;
+  box-shadow: none;
   color: var(--bcm-text);
   cursor: pointer;
+  font: inherit;
+  margin: 0;
   text-align: left;
-  padding: 7px 8px;
+  white-space: normal;
+  padding: 8px 10px;
 }
 
-.bcm-search-result:hover {
+.bcm-search-results > .bcm-search-result:hover {
   background: var(--bcm-panel-raised);
 }
 
-.bcm-search-result span {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
+.bcm-search-results > .bcm-search-result:focus-visible {
+  outline: 2px solid var(--bcm-accent);
+  outline-offset: -2px;
 }
 
-.bcm-search-result small,
+.bcm-search-results > .bcm-search-result span {
+  display: block;
+  overflow: hidden;
+  color: var(--bcm-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bcm-search-results > .bcm-search-result small,
 .bcm-search-empty {
   display: block;
-  margin-top: 2px;
-  color: var(--bcm-faint);
+  color: var(--bcm-muted);
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.45;
+}
+
+.bcm-search-results > .bcm-search-result small {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .bcm-search-empty {

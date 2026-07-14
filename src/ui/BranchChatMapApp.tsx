@@ -12,6 +12,7 @@ import { confirmAction, confirmDelete } from "./ConfirmModal";
 import type { ViewState } from "../state/viewState";
 import type { ChatMapId, NodeId } from "../types";
 import { shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
+import { SearchResultItem } from "./SearchResultItem";
 
 export interface BranchChatMapController {
   handleKeydown(this: void, event: KeyboardEvent): void;
@@ -158,6 +159,10 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const handleNoteChange = useCallback((nodeId: NodeId, note: string) => {
     viewState.updateNodeNote(nodeId, note);
+  }, [viewState]);
+
+  const handleRevealSearchResult = useCallback((nodeId: NodeId) => {
+    viewState.revealNode(nodeId);
   }, [viewState]);
 
   const handleKeydown = useCallback(
@@ -339,15 +344,13 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           {searchQuery ? (
             <div className="bcm-search-results">
               {searchResults.length > 0 ? searchResults.slice(0, 8).map((result) => (
-                <button
-                  className="bcm-search-result"
+                <SearchResultItem
+                  app={plugin.app}
                   key={result.node.id}
-                  type="button"
-                  onClick={() => viewState.revealNode(result.node.id)}
-                >
-                  <span>{displayTitle(language, result.node.title)}</span>
-                  <small>{result.excerpt}</small>
-                </button>
+                  language={language}
+                  result={result}
+                  onActivate={handleRevealSearchResult}
+                />
               )) : (
                 <div className="bcm-search-empty">{t(language, "searchNoResults")}</div>
               )}

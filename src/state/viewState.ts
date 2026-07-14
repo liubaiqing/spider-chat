@@ -5,6 +5,7 @@ import { createRootMap, addChildNode, appendMessage, createMessage, getAncestorP
 import { applyDagreLayout } from "../domain/layout";
 import { buildExportFiles } from "../export/exporters";
 import { t } from "../i18n";
+import { getMissingAiConfiguration } from "../settingsDefaults";
 import { MapRepository } from "../storage/mapRepository";
 import type { ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { cleanText, slugifyFileName, truncateText } from "../utils/text";
@@ -284,6 +285,17 @@ export class ViewState {
       return;
     }
 
+    const missingConfiguration = getMissingAiConfiguration(this.plugin.settings);
+    if (missingConfiguration) {
+      const errorKey = missingConfiguration === "apiBaseUrl"
+        ? "missingApiBaseUrl"
+        : missingConfiguration === "apiKey"
+          ? "missingApiKey"
+          : "missingModel";
+      this.setState({ error: t(this.plugin.settings.language, errorKey), errorDetails: null });
+      return;
+    }
+
     const draft = drafts[activeNodeId]?.trim();
     if (!draft) {
       return;
@@ -525,8 +537,7 @@ export class ViewState {
         return;
       }
 
-      this.plugin.settings.lastOpenedMapId = loaded.id;
-      void this.plugin.saveSettings();
+      void this.plugin.updateSettings({ lastOpenedMapId: loaded.id });
 
       this.loadedMapId = loaded.id;
       this.setState({

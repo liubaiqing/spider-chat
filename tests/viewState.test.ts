@@ -18,9 +18,9 @@ const settings: BranchChatMapSettings = {
   onboardingCardDismissed: false,
 };
 
-function createViewState(initialMap: ChatMap): ViewState {
+function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchChatMapSettings> = {}): ViewState {
   const plugin = {
-    settings: { ...settings },
+    settings: { ...settings, ...settingsOverride },
     saveSettings: async () => {},
   } as BranchChatMapPlugin;
 
@@ -86,5 +86,18 @@ describe("ViewState", () => {
 
     vs.updateNodeNote(stableMap.rootNodeId, "   ");
     expect(vs.getSnapshot().map?.nodes[stableMap.rootNodeId]?.note).toBeUndefined();
+  });
+
+  it("preserves the draft when AI configuration is incomplete", async () => {
+    const map = createRootMap("Missing configuration");
+    const vs = createViewState(map, { language: "en", apiKey: "" });
+    vs.updateDraft(map.rootNodeId, "Explain retrieval augmented generation");
+
+    await vs.sendMessage();
+
+    const snapshot = vs.getSnapshot();
+    expect(snapshot.map?.nodes[map.rootNodeId]?.messages).toHaveLength(0);
+    expect(snapshot.drafts[map.rootNodeId]).toBe("Explain retrieval augmented generation");
+    expect(snapshot.error).toBe("Missing API key. Add one in Spider settings.");
   });
 });

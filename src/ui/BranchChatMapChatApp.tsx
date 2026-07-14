@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
-import { displayTitle, t } from "../i18n";
+import { confirmDeleteSubtreeLabel, displayTitle, t } from "../i18n";
 import { NodeDetails } from "./NodeDetails";
 import type { BranchChatMapController } from "./BranchChatMapApp";
 import { getSelectionInside } from "./BranchChatMapApp";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
-import { useActiveViewState } from "./useBranchChatMapState";
+import { useActiveViewState, usePluginSettings } from "./useBranchChatMapState";
 import { getOnboardingGuideVariant } from "./onboarding";
+import { shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
+import { openPluginSettings } from "./openPluginSettings";
+import { getMissingAiConfiguration } from "../settingsDefaults";
 
 interface BranchChatMapChatAppProps {
   plugin: BranchChatMapPlugin;
@@ -20,8 +23,9 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
   const { map, activeNodeId, drafts, error, errorDetails, focusToken, pendingNodeId, streamingContent } = state;
   const node = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const parent = node?.parentId && map ? map.nodes[node.parentId] : undefined;
-  const language = plugin.settings.language;
-  const [onboardingDismissed, setOnboardingDismissed] = useState(plugin.settings.onboardingCardDismissed);
+  const settings = usePluginSettings(plugin);
+  const language = settings.language;
+  const [onboardingDismissed, setOnboardingDismissed] = useState(settings.onboardingCardDismissed);
 
   const viewState = plugin.store.getActiveSession();
 
@@ -29,9 +33,8 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
   const onboardingVariant = getOnboardingGuideVariant(map, node, onboardingDismissed);
 
   const dismissOnboarding = useCallback(() => {
-    plugin.settings.onboardingCardDismissed = true;
     setOnboardingDismissed(true);
-    void plugin.saveSettings();
+    void plugin.updateSettings({ onboardingCardDismissed: true });
     window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: true } }));
   }, [plugin]);
 
@@ -65,14 +68,14 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
       return;
     }
 
-    const ok = await confirmDelete(plugin.app, target.title);
+    const ok = await confirmDelete(plugin.app, language, target.title);
     if (!ok) {
       return;
     }
 
     const removed = await viewState.deleteCurrentMap();
     if (removed) {
-      new Notice(language === "zh-CN" ? "图谱已删除" : "Map deleted");
+      new Notice(t(language, "mapDeleted"));
     }
   }, [language, plugin.app, viewState]);
 
@@ -84,13 +87,14 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
     const subtreeCount = viewState.countNodeSubtree(nodeId);
     const childCount = Math.max(0, subtreeCount - 1);
     const message = childCount > 0
-      ? t(language, "confirmDeleteSubtree", { count: childCount })
+      ? confirmDeleteSubtreeLabel(language, childCount)
       : t(language, "confirmDeleteNode");
     const ok = await confirmAction(plugin.app, {
       title: t(language, "deleteNode"),
       message,
       confirmText: t(language, "deleteNode"),
-      cancelText: language === "zh-CN" ? "取消" : "Cancel",
+      cancelText: t(language, "cancel"),
+      openFailureText: (openError) => t(language, "confirmDialogOpenFailed", { message: openError }),
     });
     if (ok) {
       viewState.deleteNode(nodeId);
@@ -99,20 +103,18 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
 
   const handleKeydown = useCallback(
     (event: KeyboardEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest("[data-spider-note-editor='true']")) {
+      const selectedText = getSelectionInside(rootRef.current, activeDocument);
+      if (shouldCreateBranchFromTab(event, settings.useTabToCreateChildNodes, Boolean(selectedText))) {
+        event.preventDefault();
+        event.stopPropagation();
+        createChild(selectedText);
         return;
       }
 
-      if (event.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (shouldGoToParentFromShiftTab(event, settings.useTabToCreateChildNodes)) {
         event.preventDefault();
         event.stopPropagation();
-
-        if (event.shiftKey) {
-          viewState?.goToParent();
-        } else {
-          createChild();
-        }
+        viewState?.goToParent();
         return;
       }
 
@@ -121,10 +123,11 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         return;
       }
 
-      const tag = (event.target as Node)?.nodeName;
-      const isInput = tag === "INPUT" || tag === "TEXTAREA";
+      if (!shouldHandleCanvasNavigation(event)) {
+        return;
+      }
 
-      if ((event.key === "Delete" || event.key === "Backspace") && !isInput) {
+      if (event.key === "Delete" || event.key === "Backspace") {
         const vs = viewState;
         const snap = vs?.getSnapshot();
         if (snap?.map && snap.activeNodeId && snap.activeNodeId !== snap.map.rootNodeId) {
@@ -132,10 +135,6 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
           void confirmAndDeleteNode(snap.activeNodeId);
           return;
         }
-      }
-
-      if (isInput && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        return;
       }
 
       const vs = viewState;
@@ -200,7 +199,7 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         }
       }
     },
-    [confirmAndDeleteNode, createChild, plugin.settings.useTabToCreateChildNodes, viewState],
+    [confirmAndDeleteNode, createChild, settings.useTabToCreateChildNodes, viewState],
   );
 
   useEffect(() => {
@@ -213,43 +212,6 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
       deleteCurrentMap: handleDeleteCurrentMap,
     });
   }, [createChild, handleDeleteCurrentMap, handleKeydown, onController, viewState]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    const doc = activeDocument;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (doc.activeElement?.closest("[data-spider-note-editor='true']")) {
-        return;
-      }
-
-      if (e.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const container = rootRef.current;
-        if (!container) return;
-
-        const sel = doc.getSelection();
-        const inContainer = (node: Node | null) => node instanceof Node && container.contains(node);
-
-        const hasSelection = (sel && sel.rangeCount > 0 && inContainer(sel.getRangeAt(0).commonAncestorContainer));
-        const inTextarea = doc.activeElement?.tagName === "TEXTAREA" && inContainer(doc.activeElement);
-
-        if (!hasSelection && !inTextarea) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.shiftKey) {
-          viewState?.goToParent();
-        } else {
-          createChild(getSelectionInside(container, doc));
-        }
-      }
-    };
-
-    doc.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => doc.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [createChild, plugin.settings.useTabToCreateChildNodes, viewState]);
 
   if (!node) {
     return (
@@ -274,7 +236,7 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         errorDetails={errorDetails}
         focusToken={focusToken}
         isPending={pendingNodeId === node.id}
-        canUseAi={Boolean(plugin.settings.apiKey && plugin.settings.model)}
+        canUseAi={!getMissingAiConfiguration(settings)}
         language={language}
         onboardingVariant={onboardingVariant}
         streamingContent={streamingContent[node.id] ?? ""}
@@ -285,6 +247,11 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         onDraftChange={(value) => vs?.updateDraft(node.id, value)}
         onGoParent={() => vs?.goToParent()}
         onMarkUnderstood={() => vs?.markUnderstood()}
+        onOpenSettings={() => {
+          if (!openPluginSettings(plugin.app, plugin.manifest.id)) {
+            new Notice(t(language, "openSettingsFailed"));
+          }
+        }}
         onRevealNode={(nodeId) => vs?.revealNode(nodeId)}
         onRetry={() => void vs?.retryAssistant()}
         onSend={() => void vs?.sendMessage()}

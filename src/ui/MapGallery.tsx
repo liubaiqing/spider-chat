@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
-import { displayTitle, t } from "../i18n";
+import { displayTitle, nodesCountLabel, t } from "../i18n";
 import type { ChatMap, ChatMapId } from "../types";
 import { confirmDelete } from "./ConfirmModal";
 
@@ -34,20 +34,20 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
   const handleDelete = async (e: React.MouseEvent, entry: MapEntry) => {
     e.stopPropagation();
     e.preventDefault();
-    const ok = await confirmDelete(plugin.app, entry.map.title);
+    const ok = await confirmDelete(plugin.app, language, entry.map.title);
     if (!ok) return;
 
     try {
       const deleted = await plugin.store.repository.deleteMap(entry.map.id);
       if (deleted) {
-        new Notice(language === "zh-CN" ? "图谱已删除" : "Map deleted");
+        new Notice(t(language, "mapDeleted"));
         refresh();
       } else {
-        new Notice(language === "zh-CN" ? "未找到该图谱文件" : "Map file not found");
+        new Notice(t(language, "mapFileNotFound"));
       }
     } catch (deleteError: unknown) {
       const message = deleteError instanceof Error ? deleteError.message : String(deleteError);
-      new Notice(language === "zh-CN" ? `删除失败：${message}` : `Delete failed: ${message}`);
+      new Notice(t(language, "deleteFailed", { message }));
     }
   };
 
@@ -67,9 +67,7 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
         </div>
         {entries.length === 0 ? (
           <div className="bcm-gallery-empty">
-            {language === "zh-CN"
-              ? "还没有图谱。点击上方按钮创建一个。"
-              : "No maps yet. Create one above."}
+            {t(language, "galleryEmpty")}
           </div>
         ) : (
           <div className="bcm-gallery-grid">
@@ -85,7 +83,12 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelectMap(entry.map.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter") onSelectMap(entry.map.id); }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectMap(entry.map.id);
+                    }
+                  }}
                 >
                   <div className="bcm-gallery-card-accent" />
                   <div className="bcm-gallery-card-body">
@@ -95,7 +98,7 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
                     {root ? (
                       <div className="bcm-gallery-card-root">
                         <span className="bcm-gallery-card-root-label">
-                          {language === "zh-CN" ? "根问题" : "Root"}:
+                          {t(language, "rootLabel")}:
                         </span>
                         {root.title}
                       </div>
@@ -106,12 +109,12 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
                       </div>
                     ) : (
                       <div className="bcm-gallery-card-empty">
-                        {language === "zh-CN" ? "暂无对话" : "No messages yet"}
+                        {t(language, "noMessagesYet")}
                       </div>
                     )}
                     <div className="bcm-gallery-card-footer">
                       <span className="bcm-gallery-card-meta">
-                        {t(language, "nodesCount", { count: nodeCount })}
+                        {nodesCountLabel(language, nodeCount)}
                       </span>
                       <span className="bcm-gallery-card-meta">
                         {t(language, "updatedAt", { time: new Date(entry.map.updatedAt).toLocaleString(language) })}
@@ -121,7 +124,7 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
                         type="button"
                         onClick={(e) => { void handleDelete(e, entry); }}
                         onMouseDown={(e) => e.stopPropagation()}
-                        aria-label={language === "zh-CN" ? "删除" : "Delete"}
+                        aria-label={t(language, "delete")}
                       >
                         &times;
                       </button>

@@ -1,5 +1,6 @@
-import { Plugin, WorkspaceLeaf, type Editor } from "obsidian";
-import { DEFAULT_SETTINGS, BranchChatMapSettingTab } from "./settings";
+import { getLanguage, Plugin, WorkspaceLeaf, type Command, type Editor } from "obsidian";
+import { BranchChatMapSettingTab } from "./settings";
+import { createDefaultSettings, DEFAULT_SETTINGS } from "./settingsDefaults";
 import type { BranchChatMapSettings } from "./types";
 import {
   LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP,
@@ -8,15 +9,23 @@ import {
   VIEW_TYPE_BRANCH_CHAT_MAP_CHAT,
 } from "./constants";
 import { BranchChatMapChatView, BranchChatMapView } from "./view";
-import { t } from "./i18n";
+import { t, type TranslationKey } from "./i18n";
 import { BranchChatMapStore } from "./state/branchChatMapStore";
+import { PluginSettingsStore } from "./state/pluginSettingsStore";
 import { MapSwitcherModal } from "./ui/MapSwitcherModal";
 import { createRootMap } from "./domain/chatMap";
 import { applyDagreLayout } from "./domain/layout";
+import { updateLocalizedChrome, type LocalizedCommand } from "./localizedChrome";
 
 export default class BranchChatMapPlugin extends Plugin {
   settings: BranchChatMapSettings = DEFAULT_SETTINGS;
   store!: BranchChatMapStore;
+  private readonly settingsStore = new PluginSettingsStore();
+  private readonly localizedCommands: LocalizedCommand[] = [];
+  private ribbonEl: HTMLElement | null = null;
+
+  subscribeSettings = this.settingsStore.subscribe;
+  getSettingsRevision = this.settingsStore.getRevision;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -31,21 +40,19 @@ export default class BranchChatMapPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new BranchChatMapChatView(leaf, this),
     );
 
-    this.addRibbonIcon("network", t(this.settings.language, "openMap"), () => {
+    this.ribbonEl = this.addRibbonIcon("network", t(this.settings.language, "openMap"), () => {
       void this.activateView();
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("openMap", {
       id: "open-map",
-      name: t(this.settings.language, "openMap"),
       callback: () => {
         void this.activateView();
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("createChildCommand", {
       id: "create-child-node",
-      name: t(this.settings.language, "createChildCommand"),
       callback: () => {
         const vs = this.store.getActiveSession();
         if (vs) {
@@ -56,9 +63,8 @@ export default class BranchChatMapPlugin extends Plugin {
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("createChildFromSelectionCommand", {
       id: "create-child-node-from-selection",
-      name: t(this.settings.language, "createChildFromSelectionCommand"),
       editorCallback: (editor: Editor) => {
         const selection = editor.getSelection().trim();
         const vs = this.store.getActiveSession();
@@ -70,41 +76,36 @@ export default class BranchChatMapPlugin extends Plugin {
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("goToParentCommand", {
       id: "go-to-parent-node",
-      name: t(this.settings.language, "goToParentCommand"),
       callback: () => {
         this.store.getActiveSession()?.goToParent();
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("summarizeCurrentNodeCommand", {
       id: "summarize-current-node",
-      name: t(this.settings.language, "summarizeCurrentNodeCommand"),
       callback: () => {
         void this.store.getActiveSession()?.summarizeCurrentNode();
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("exportMapCommand", {
       id: "export-current-map",
-      name: t(this.settings.language, "exportMapCommand"),
       callback: () => {
         void this.store.getActiveSession()?.exportMap();
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("newMapCommand", {
       id: "new-map",
-      name: t(this.settings.language, "newMapCommand"),
       callback: () => {
         void this.newSpiderView();
       },
     });
 
-    this.addCommand({
+    this.addLocalizedCommand("switchMapCommand", {
       id: "switch-map",
-      name: t(this.settings.language, "switchMapCommand"),
       callback: () => {
         const modal = new MapSwitcherModal(this);
         void modal.loadMaps().then(() => modal.open());
@@ -112,6 +113,7 @@ export default class BranchChatMapPlugin extends Plugin {
     });
 
     this.addSettingTab(new BranchChatMapSettingTab(this.app, this));
+    this.updateLocalizedChrome();
 
     this.app.workspace.onLayoutReady(() => {
       this.detachLegacyViews();
@@ -128,14 +130,28 @@ export default class BranchChatMapPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
+    const defaults = createDefaultSettings(getLanguage());
     this.settings = {
-      ...DEFAULT_SETTINGS,
+      ...defaults,
       ...((await this.loadData()) as Partial<BranchChatMapSettings> | null),
     };
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  async updateSettings(patch: Partial<BranchChatMapSettings>): Promise<void> {
+    const previous = this.settings;
+    this.settings = { ...previous, ...patch };
+    try {
+      await this.saveSettings();
+    } catch (error: unknown) {
+      this.settings = previous;
+      throw error;
+    }
+    this.updateLocalizedChrome();
+    this.settingsStore.notify();
   }
 
   async activateView(): Promise<void> {
@@ -222,6 +238,20 @@ export default class BranchChatMapPlugin extends Plugin {
   private detachLegacyViews(): void {
     this.app.workspace.detachLeavesOfType(LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP);
     this.app.workspace.detachLeavesOfType(LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP_CHAT);
+  }
+
+  private addLocalizedCommand(key: TranslationKey, command: Omit<Command, "name">): void {
+    const localizedCommand: Command = {
+      ...command,
+      name: t(this.settings.language, key),
+    };
+    // Keep our own reference because some Obsidian builds do not return the command object at runtime.
+    this.addCommand(localizedCommand);
+    this.localizedCommands.push({ command: localizedCommand, key });
+  }
+
+  private updateLocalizedChrome(): void {
+    updateLocalizedChrome(this.settings.language, this.localizedCommands, this.ribbonEl);
   }
 
   private isRightSidebarLeaf(leaf: WorkspaceLeaf): boolean {

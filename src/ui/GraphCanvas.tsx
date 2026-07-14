@@ -13,7 +13,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { memo, useEffect, useMemo, useState, type ReactElement } from "react";
-import { displayTitle, statusLabel, t } from "../i18n";
+import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, NodeId } from "../types";
 import { markdownToPlainText, truncateText } from "../utils/text";
 import { NodeNotePopover } from "./NodeNotePopover";
@@ -41,7 +41,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
   const hasNote = Boolean(data.node.note?.trim());
   const hasSummary = Boolean(data.node.summary?.trim());
   const hasAnchor = Boolean(data.node.anchorText?.trim());
-  const branchLabel = t(data.language, "branchesCount", { count: data.childCount });
+  const branchLabel = branchesCountLabel(data.language, data.childCount);
   const previewContent = data.node.note?.trim() || data.node.summary?.trim();
   const previewLabel = hasNote ? t(data.language, "nodeNote") : t(data.language, "nodeSummaryLabel");
   const previewText = previewContent ? truncateText(markdownToPlainText(previewContent), 180) : "";
@@ -220,7 +220,13 @@ function GraphCanvasInner({
   }, [computedNodes]);
 
   return (
-    <div className="bcm-graph">
+    <div
+      className="bcm-graph"
+      data-spider-canvas="true"
+      tabIndex={0}
+      role="application"
+      aria-label={t(language, "graphCanvasLabel")}
+    >
       <ReactFlow<BranchFlowNode, Edge>
         nodes={nodes}
         edges={computedEdges}

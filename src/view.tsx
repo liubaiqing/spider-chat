@@ -180,8 +180,7 @@ export class BranchChatMapView extends BranchChatMapBaseView {
         }}
         onLoadMap={(mapId) => {
           void this.viewState?.load(mapId);
-          this.plugin.settings.lastOpenedMapId = mapId;
-          void this.plugin.saveSettings();
+          void this.plugin.updateSettings({ lastOpenedMapId: mapId });
         }}
       />
     );

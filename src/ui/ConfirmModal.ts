@@ -1,10 +1,13 @@
 import { App, ButtonComponent, Modal, Notice } from "obsidian";
+import { t } from "../i18n";
+import type { AppLanguage } from "../types";
 
 interface ConfirmActionOptions {
   title: string;
   message: string;
   confirmText: string;
   cancelText: string;
+  openFailureText(errorMessage: string): string;
 }
 
 export function confirmAction(app: App, options: ConfirmActionOptions): Promise<boolean> {
@@ -54,17 +57,18 @@ export function confirmAction(app: App, options: ConfirmActionOptions): Promise<
       modal.open();
     } catch (openError: unknown) {
       const message = openError instanceof Error ? openError.message : String(openError);
-      new Notice(`打开确认弹窗失败：${message}`);
+      new Notice(options.openFailureText(message));
       settle(false);
     }
   });
 }
 
-export function confirmDelete(app: App, itemName: string): Promise<boolean> {
+export function confirmDelete(app: App, language: AppLanguage, itemName: string): Promise<boolean> {
   return confirmAction(app, {
-    title: "确认删除",
-    message: `确认删除「${itemName}」？此操作不可撤销。`,
-    confirmText: "删除",
-    cancelText: "取消",
+    title: t(language, "deleteMap"),
+    message: t(language, "confirmDeleteMap", { title: itemName }),
+    confirmText: t(language, "delete"),
+    cancelText: t(language, "cancel"),
+    openFailureText: (message) => t(language, "confirmDialogOpenFailed", { message }),
   });
 }

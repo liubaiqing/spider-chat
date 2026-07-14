@@ -3,7 +3,7 @@
 [![GitHub release (latest)](https://img.shields.io/github/v/release/111pointer111/spider?style=flat-square)](https://github.com/111pointer111/spider/releases/latest)
 [![GitHub downloads](https://img.shields.io/github/downloads/111pointer111/spider/total?style=flat-square)](https://github.com/111pointer111/spider/releases)
 [![License](https://img.shields.io/github/license/111pointer111/spider?style=flat-square)](LICENSE)
-[![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.13.0-blueviolet?style=flat-square)](https://obsidian.md)
+[![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-blueviolet?style=flat-square)](https://obsidian.md)
 [![Status](https://img.shields.io/badge/status-awaiting%20review-orange?style=flat-square)](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
 
 > 🌏 **其他语言**: [English](README.md)
@@ -14,7 +14,7 @@
 
 ![spider screenshot](.github/screenshot.png)
 
-> 🎬 **想要看动态演示？** 这里应该有 GIF——录一段 5 秒的 Tab 分支演示，放到 `.github/demo.gif` 并替换上面这张静态图。详见 [录制动图](#-录制动图)。
+> 首次安装时 Spider 会跟随 Obsidian 的界面语言，也可以随时在设置中切换中文或 English。
 
 ---
 
@@ -27,15 +27,11 @@
 | 探索完想把对话留作笔记 | 复制粘贴到笔记里，链接断裂 | 给节点写个人笔记，再导出 Markdown + Canvas |
 | 想让 AI 回答像 Notion AI 一样嵌在文档里 | 切窗口来回复制 | 全程不离开 Obsidian |
 
-> **vs Copilot 插件**：Copilot 是单线程聊天机器人；Spider 是多线程**知识图谱**——同样聊一个话题，Copilot 给你一条线，Spider 给你一棵树。
-
----
-
 ## ⚡ 30 秒上手
 
-1. **安装**：Settings → Community plugins → Browse → 搜 `spider` → Enable
+1. **安装**：社区商店审核期间，请按照下方步骤从 GitHub Release 手动安装
 2. **配置 API Key**：Settings → Spider → 填 `apiBaseUrl` + `apiKey` + `model`（任何 OpenAI 兼容端点都行）
-3. **新建一张图**：ribbon 上的 spider 图标（或命令面板 `Spider: New map`）→ 开始聊天
+3. **新建一张图**：点击 Spider ribbon 图标（或运行命令 `Spider: 新建 Spider 图谱`）→ 开始聊天
 4. **试试 Tab 分支**：AI 回答里选中一段文字，按 `Tab` —— 就这么简单
 
 ---
@@ -83,12 +79,12 @@ Spider Maps/
 ### 🔐 隐私 & 网络声明
 - 插件**需要联网**才能调用 AI，但你完全掌控调用哪个端点
 - **API key 仅存本地**（Obsidian 插件的 data.json），不上传任何地方
-- **不发 vault 全文**：只发当前节点的消息 + 可选的父上下文 + 可选的锚点文字
+- **不读取无关笔记**：AI 请求只包含当前分支，以及你主动开启的上下文内容
 - **图谱数据 100% 本地**：所有地图存为 `.spider/maps/*.json`，可被 Obsidian 同步
 - **离线可用**：知识图谱、导航、导出、查看历史全部不依赖网络，只有"发送消息"需要
 
 ### 🌐 中英双语
-界面在中文 / English 之间随时切换。**导出物刻意保持中文硬编码**——导出的是历史档案，不能因为切语言就把旧 md 改写。
+首次安装时跟随 Obsidian 的界面语言，也可以随时切换中文 / English；新生成的导出文件使用当前 Spider 界面语言。
 
 ---
 
@@ -96,14 +92,14 @@ Spider Maps/
 
 | 按键 | 作用 |
 |---|---|
-| `Tab` | 在 AI 回答里选中文字后按 Tab → 生成子节点；无选中时按 Tab → 生成空子节点 |
-| `Shift + Tab` | 回到父节点 |
-| `← →` | 父节点 ↔ 第一个子节点 |
-| `↑ ↓` | 兄弟节点之间穿梭 |
+| `Tab` | 在 AI 回答里选中文字后创建分支；图谱画布获得焦点时创建空分支 |
+| `Shift + Tab` | 图谱画布获得焦点时返回父节点 |
+| `← →` | 图谱画布获得焦点时在父节点与第一个子节点间移动 |
+| `↑ ↓` | 图谱画布获得焦点时在兄弟节点之间移动 |
 | `Enter` | 发送消息（在输入框） |
 | `Shift + Enter` | 换行（在输入框） |
 | `Esc` | 清除当前选区 |
-| `Delete` / `Backspace` | 删除当前节点（非根节点，且焦点不在输入框时） |
+| `Delete` / `Backspace` | 图谱画布获得焦点时删除当前非根节点 |
 
 ---
 
@@ -114,9 +110,9 @@ Spider Maps/
 | API Base URL | OpenAI 兼容端点 | `https://api.openai.com/v1` |
 | API Key | 你的 API key（密码输入框，本地存储） | — |
 | Model | 该端点支持的任意模型名 | `gpt-4o-mini` |
-| Interface Language | 中文 / English | 中文 |
+| Interface Language | 中文 / English | 跟随 Obsidian |
 | Include parent context | 子节点请求是否带父节点的标题/摘要/锚点 | ✅ 开 |
-| Include full context | 父节点所有历史消息也带过去（更费 token） | ❌ 关 |
+| Include full context | 把图谱中其他分支也作为参考（更费 token） | ❌ 关 |
 | Stream responses | 流式响应 | ✅ 开 |
 | Tab to create child nodes | Tab 键开关 | ✅ 开 |
 | Auto-summarize nodes | AI 自动给节点生成摘要 | ❌ 关 |
@@ -126,11 +122,13 @@ Spider Maps/
 
 ## 📥 安装
 
-### 商店安装（推荐）
-1. Obsidian → **Settings** → **Community plugins**
-2. 关闭 Safe mode（如果是开的）
-3. **Browse** → 搜 `spider` → **Install** → **Enable**
-4. Settings → **Spider** → 填 API key 和 model
+### 从 GitHub Release 安装（社区商店审核期间）
+1. 从最新 [Release](https://github.com/111pointer111/spider/releases/latest) 下载 `main.js`、`manifest.json` 和 `styles.css`
+2. 创建 `<vault>/.obsidian/plugins/spider/`
+3. 把三个文件复制到该目录
+4. 重启 Obsidian，在 **Settings → Community plugins** 中启用 Spider，然后配置 API key 和 model
+
+社区商店上架后，可以直接在 **Settings → Community plugins → Browse** 中安装。
 
 ### 从源码安装（开发）
 ```bash
@@ -172,19 +170,8 @@ tests/         vitest 单测（领域层 + 导出层 + AI 层）
 __mocks__/     Obsidian API 的桩模块（让 vitest 跑得起来）
 ```
 
-### 🎥 录制动图
-
-> 🎬 如果你想贡献一段演示动图：
-> 1. 用 [Kap](https://getkap.co/) (macOS) / [ScreenToGif](https://www.screentogif.com/) (Windows) / `ffmpeg` (Linux) 录一段 5–10 秒的操作
-> 2. 展示：开 spider → 问个问题 → AI 回答里选中一段文字 → 按 Tab → 出现子节点 → 继续追问
-> 3. 导出为 GIF，放到 `.github/demo.gif`
-> 4. PR 到本仓库，把第一张图换成 `![spider demo](.github/demo.gif)`
-
----
-
 ## 🧭 路线图（想到就写）
 
-- [ ] 节点全文搜索（Ctrl/Cmd+F 替代）
 - [ ] 多选节点 + 批量操作
 - [ ] 节点引用 / 反向链接（自动追踪"哪个节点引用了我"）
 - [ ] 自定义 system prompt

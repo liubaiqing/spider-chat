@@ -3,14 +3,15 @@ import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
-import { displayTitle, t } from "../i18n";
+import { confirmDeleteSubtreeLabel, displayTitle, mapStatsLabel, t } from "../i18n";
 import { GraphCanvas } from "./GraphCanvas";
-import { useBranchChatMapState } from "./useBranchChatMapState";
+import { useBranchChatMapState, usePluginSettings } from "./useBranchChatMapState";
 import { MapSwitcherModal } from "./MapSwitcherModal";
 import { MapGallery } from "./MapGallery";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
 import type { ViewState } from "../state/viewState";
 import type { ChatMapId, NodeId } from "../types";
+import { shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 
 export interface BranchChatMapController {
   handleKeydown(this: void, event: KeyboardEvent): void;
@@ -72,7 +73,8 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
   const [searchQuery, setSearchQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const activeNode = activeNodeId && map ? map.nodes[activeNodeId] : null;
-  const language = plugin.settings.language;
+  const settings = usePluginSettings(plugin);
+  const language = settings.language;
   const path = viewState.getActivePath();
 
   useEffect(() => {
@@ -94,13 +96,13 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     if (!target) {
       return;
     }
-    const ok = await confirmDelete(plugin.app, target.title);
+    const ok = await confirmDelete(plugin.app, language, target.title);
     if (!ok) {
       return;
     }
     const removed = await viewState.deleteCurrentMap();
     if (removed) {
-      new Notice(language === "zh-CN" ? "图谱已删除" : "Map deleted");
+      new Notice(t(language, "mapDeleted"));
     }
   }, [language, plugin.app, viewState]);
 
@@ -110,7 +112,8 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
         title: t(language, "autoLayout"),
         message: t(language, "confirmAutoLayout"),
         confirmText: t(language, "autoLayout"),
-        cancelText: language === "zh-CN" ? "取消" : "Cancel",
+        cancelText: t(language, "cancel"),
+        openFailureText: (message) => t(language, "confirmDialogOpenFailed", { message }),
       });
       if (!ok) {
         return;
@@ -124,13 +127,14 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     const subtreeCount = viewState.countNodeSubtree(nodeId);
     const childCount = Math.max(0, subtreeCount - 1);
     const message = childCount > 0
-      ? t(language, "confirmDeleteSubtree", { count: childCount })
+      ? confirmDeleteSubtreeLabel(language, childCount)
       : t(language, "confirmDeleteNode");
     const ok = await confirmAction(plugin.app, {
       title: t(language, "deleteNode"),
       message,
       confirmText: t(language, "deleteNode"),
-      cancelText: language === "zh-CN" ? "取消" : "Cancel",
+      cancelText: t(language, "cancel"),
+      openFailureText: (openError) => t(language, "confirmDialogOpenFailed", { message: openError }),
     });
     if (ok) {
       viewState.deleteNode(nodeId);
@@ -158,23 +162,18 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const handleKeydown = useCallback(
     (event: KeyboardEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest("[data-spider-note-editor='true']")) {
+      const selectedText = getSelectionInside(rootRef.current, activeDocument);
+      if (shouldCreateBranchFromTab(event, settings.useTabToCreateChildNodes, Boolean(selectedText))) {
+        event.preventDefault();
+        event.stopPropagation();
+        createChild(selectedText);
         return;
       }
 
-      const tag = (event.target as Node)?.nodeName;
-      const isInput = tag === "INPUT" || tag === "TEXTAREA";
-
-      if (event.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (shouldGoToParentFromShiftTab(event, settings.useTabToCreateChildNodes)) {
         event.preventDefault();
         event.stopPropagation();
-
-        if (event.shiftKey) {
-          viewState.goToParent();
-        } else {
-          createChild();
-        }
+        viewState.goToParent();
         return;
       }
 
@@ -183,17 +182,17 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
         return;
       }
 
-      if ((event.key === "Delete" || event.key === "Backspace") && !isInput) {
+      if (!shouldHandleCanvasNavigation(event)) {
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
         const { map, activeNodeId } = viewState.getSnapshot();
         if (map && activeNodeId && activeNodeId !== map.rootNodeId) {
           event.preventDefault();
           void confirmAndDeleteNode(activeNodeId);
           return;
         }
-      }
-
-      if (isInput && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        return;
       }
 
       const { map, activeNodeId: currentId } = viewState.getSnapshot();
@@ -254,7 +253,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
         }
       }
     },
-    [confirmAndDeleteNode, createChild, plugin.settings.useTabToCreateChildNodes, viewState],
+    [confirmAndDeleteNode, createChild, settings.useTabToCreateChildNodes, viewState],
   );
 
   useEffect(() => {
@@ -267,43 +266,6 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
       deleteCurrentMap: handleDeleteCurrentMap,
     });
   }, [createChild, handleDeleteCurrentMap, handleKeydown, onController, viewState]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    const doc = activeDocument;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (doc.activeElement?.closest("[data-spider-note-editor='true']")) {
-        return;
-      }
-
-      if (e.key === "Tab" && plugin.settings.useTabToCreateChildNodes && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const container = rootRef.current;
-        if (!container) return;
-
-        const sel = doc.getSelection();
-        const inContainer = (node: Node | null) => node instanceof Node && container.contains(node);
-
-        const hasSelection = (sel && sel.rangeCount > 0 && inContainer(sel.getRangeAt(0).commonAncestorContainer));
-        const inTextarea = doc.activeElement?.tagName === "TEXTAREA" && inContainer(doc.activeElement);
-
-        if (!hasSelection && !inTextarea) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.shiftKey) {
-          viewState.goToParent();
-        } else {
-          createChild(getSelectionInside(container, doc));
-        }
-      }
-    };
-
-    doc.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => doc.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [createChild, plugin.settings.useTabToCreateChildNodes, viewState]);
 
   if (!map || !activeNode) {
     return (
@@ -329,20 +291,26 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
               tabIndex={0}
               title={t(language, "switchMapHint")}
               aria-label={t(language, "switchMapHint")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleSwitchClick();
+                }
+              }}
             >
               {displayTitle(language, map.title)}
               <span className="bcm-title-arrow">▾</span>
             </span>
             <button className="bcm-title-add" onClick={onNewSpider} type="button" aria-label={t(language, "newMapCommand")}>+</button>
           </div>
-          <div className="bcm-topbar-meta">{t(language, "mapStats", { nodes: nodeCount, depth: Math.max(path.length - 1, 0) })}</div>
+          <div className="bcm-topbar-meta">{mapStatsLabel(language, nodeCount, Math.max(path.length - 1, 0))}</div>
         </div>
         <div className="bcm-topbar-actions">
           <button className="bcm-topbar-btn" onClick={() => { void handleAutoLayout(); }} type="button" title={t(language, "autoLayout")}>
-            {language === "zh-CN" ? "布局" : "Layout"}
+            {t(language, "layout")}
           </button>
           <button className="bcm-topbar-btn" onClick={() => { void viewState.exportMap(); }} type="button" title={t(language, "export")}>
-            {language === "zh-CN" ? "导出" : "Export"}
+            {t(language, "export")}
           </button>
           <div className="bcm-more">
             <button className="bcm-topbar-btn" onClick={() => setMoreOpen((open) => !open)} type="button" title={t(language, "moreActions")} aria-expanded={moreOpen}>

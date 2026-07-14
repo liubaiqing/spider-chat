@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 import type BranchChatMapPlugin from "../main";
 import type { ViewState, BranchChatMapState } from "../state/viewState";
+import type { BranchChatMapSettings } from "../types";
 
 const INITIAL_STATE: BranchChatMapState = {
   map: null,
@@ -55,3 +56,7 @@ export function useActiveViewState(plugin: BranchChatMapPlugin): BranchChatMapSt
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+export function usePluginSettings(plugin: BranchChatMapPlugin): BranchChatMapSettings {
+  useSyncExternalStore(plugin.subscribeSettings, plugin.getSettingsRevision, plugin.getSettingsRevision);
+  return plugin.settings;
+}

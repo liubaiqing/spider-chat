@@ -1,23 +1,10 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type BranchChatMapPlugin from "./main";
 import { DEFAULT_EXPORT_DIR } from "./constants";
-import type { BranchChatMapSettings } from "./types";
 import { t } from "./i18n";
 import { OpenAICompatibleProvider, type ApiTestResult } from "./ai/openAICompatibleProvider";
 
-export const DEFAULT_SETTINGS: BranchChatMapSettings = {
-  language: "zh-CN",
-  apiBaseUrl: "https://api.openai.com/v1",
-  apiKey: "",
-  model: "gpt-4o-mini",
-  defaultExportFolder: DEFAULT_EXPORT_DIR,
-  useTabToCreateChildNodes: true,
-  autoSummarizeNodes: false,
-  includeParentContext: true,
-  includeFullContext: false,
-  streamResponses: true,
-  onboardingCardDismissed: false,
-};
+export { DEFAULT_SETTINGS } from "./settingsDefaults";
 
 export class BranchChatMapSettingTab extends PluginSettingTab {
   private readonly plugin: BranchChatMapPlugin;
@@ -45,8 +32,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .addOption("en", "English")
           .setValue(this.plugin.settings.language)
           .onChange(async (value) => {
-            this.plugin.settings.language = value === "en" ? "en" : "zh-CN";
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ language: value === "en" ? "en" : "zh-CN" });
             this.display();
           });
       });
@@ -59,8 +45,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .setPlaceholder("https://api.openai.com/v1")
           .setValue(this.plugin.settings.apiBaseUrl)
           .onChange(async (value) => {
-            this.plugin.settings.apiBaseUrl = value.trim();
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ apiBaseUrl: value.trim() });
           });
       });
 
@@ -73,8 +58,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .setPlaceholder("sk-...")
           .setValue(this.plugin.settings.apiKey)
           .onChange(async (value) => {
-            this.plugin.settings.apiKey = value.trim();
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ apiKey: value.trim() });
           });
       });
 
@@ -86,14 +70,13 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .setPlaceholder("gpt-4o-mini")
           .setValue(this.plugin.settings.model)
           .onChange(async (value) => {
-            this.plugin.settings.model = value.trim();
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ model: value.trim() });
           });
       });
 
     const apiTestSetting = new Setting(containerEl)
       .setName(t(language, "apiTest"))
-      .setDesc(this.apiTestResult ? formatApiTestResult(this.apiTestResult) : t(language, "settingModelDesc"));
+      .setDesc(this.apiTestResult ? formatApiTestResult(this.apiTestResult) : t(language, "apiTestDesc"));
 
     apiTestSetting.addButton((button) => {
       button
@@ -121,8 +104,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .setPlaceholder(DEFAULT_EXPORT_DIR)
           .setValue(this.plugin.settings.defaultExportFolder)
           .onChange(async (value) => {
-            this.plugin.settings.defaultExportFolder = value.trim() || DEFAULT_EXPORT_DIR;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ defaultExportFolder: value.trim() || DEFAULT_EXPORT_DIR });
           });
       });
 
@@ -133,8 +115,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.useTabToCreateChildNodes)
           .onChange(async (value) => {
-            this.plugin.settings.useTabToCreateChildNodes = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ useTabToCreateChildNodes: value });
           });
       });
 
@@ -145,8 +126,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.includeParentContext)
           .onChange(async (value) => {
-            this.plugin.settings.includeParentContext = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ includeParentContext: value });
           });
       });
 
@@ -157,8 +137,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.includeFullContext)
           .onChange(async (value) => {
-            this.plugin.settings.includeFullContext = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ includeFullContext: value });
           });
       });
 
@@ -169,8 +148,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.streamResponses)
           .onChange(async (value) => {
-            this.plugin.settings.streamResponses = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ streamResponses: value });
           });
       });
 
@@ -181,8 +159,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.autoSummarizeNodes)
           .onChange(async (value) => {
-            this.plugin.settings.autoSummarizeNodes = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ autoSummarizeNodes: value });
           });
       });
 
@@ -193,8 +170,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
         button
           .setButtonText(t(language, "settingOnboardingButton"))
           .onClick(async () => {
-            this.plugin.settings.onboardingCardDismissed = false;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings({ onboardingCardDismissed: false });
             window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: false } }));
             new Notice(t(language, "settingOnboardingRestored"));
           });

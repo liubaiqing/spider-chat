@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { App } from "obsidian";
-import { displayTitle, roleLabel, statusLabel, t } from "../i18n";
+import { displayTitle, nodeStatsLabel, roleLabel, t } from "../i18n";
 import type { AppLanguage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { OnboardingCard } from "./OnboardingCard";
@@ -28,6 +28,7 @@ interface NodeDetailsProps {
   onDraftChange(this: void, value: string): void;
   onGoParent(this: void): void;
   onMarkUnderstood(this: void): void;
+  onOpenSettings(this: void): void;
   onRevealNode(this: void, nodeId: NodeId): void;
   onRetry(this: void): void;
   onSend(this: void): void;
@@ -78,6 +79,7 @@ export function NodeDetails({
   onDraftChange,
   onGoParent,
   onMarkUnderstood,
+  onOpenSettings,
   onRevealNode,
   onRetry,
   onSend,
@@ -180,6 +182,7 @@ export function NodeDetails({
               <input
                 className="bcm-node-title-input"
                 value={titleDraft}
+                aria-label={t(language, "nodeTitleLabel")}
                 onBlur={commitTitle}
                 onChange={(e) => setTitleDraft(e.currentTarget.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
@@ -188,7 +191,7 @@ export function NodeDetails({
                 className={`bcm-status bcm-status-${node.status}`}
                 value={node.status}
                 onChange={(e) => onStatusChange(e.currentTarget.value as ChatNodeStatus)}
-                aria-label={language === "zh-CN" ? "节点状态" : "Node status"}
+                aria-label={t(language, "nodeStatusLabel")}
               >
                 <option value="open">{t(language, "statusOpen")}</option>
                 <option value="understood">{t(language, "statusUnderstood")}</option>
@@ -196,7 +199,7 @@ export function NodeDetails({
               </select>
             </div>
             <div className="bcm-node-facts">
-              {t(language, "nodeStats", { messages: node.messages.length, children: node.children.length })}
+              {nodeStatsLabel(language, node.messages.length, node.children.length)}
             </div>
           </div>
 
@@ -252,13 +255,13 @@ export function NodeDetails({
         </div>
 
         {showScrollTop ? (
-          <button className="bcm-scroll-jump bcm-scroll-top" type="button" onClick={() => scrollToTop()} aria-label={language === "zh-CN" ? "回到顶部" : "Scroll to top"}>
+          <button className="bcm-scroll-jump bcm-scroll-top" type="button" onClick={() => scrollToTop()} aria-label={t(language, "scrollTop")}>
             <ScrollJumpIcon direction="up" />
           </button>
         ) : null}
 
         {showScrollBottom ? (
-          <button className="bcm-scroll-jump bcm-scroll-bottom" type="button" onClick={() => scrollToBottom()} aria-label={language === "zh-CN" ? "跳到最新消息" : "Jump to latest"}>
+          <button className="bcm-scroll-jump bcm-scroll-bottom" type="button" onClick={() => scrollToBottom()} aria-label={t(language, "scrollLatest")}>
             <ScrollJumpIcon direction="down" />
           </button>
         ) : null}
@@ -269,7 +272,7 @@ export function NodeDetails({
           <span>{error}</span>
           {errorDetails ? (
             <details>
-              <summary>{language === "zh-CN" ? "详情" : "Details"}</summary>
+              <summary>{t(language, "details")}</summary>
               <pre>{errorDetails}</pre>
             </details>
           ) : null}
@@ -278,19 +281,30 @@ export function NodeDetails({
       ) : null}
 
       <div className="bcm-composer">
-        {onboardingVariant === "ask" ? (
+        {!canUseAi ? (
+          <section className="bcm-provider-setup" aria-labelledby="spider-provider-setup-title">
+            <div>
+              <div className="bcm-provider-setup-title" id="spider-provider-setup-title">{t(language, "connectAiTitle")}</div>
+              <div className="bcm-provider-setup-body">{t(language, "connectAiBody")}</div>
+            </div>
+            <button type="button" onClick={onOpenSettings}>{t(language, "openSettings")}</button>
+          </section>
+        ) : onboardingVariant === "ask" ? (
           <OnboardingCard language={language} variant="ask" onDismiss={onDismissOnboarding} />
         ) : null}
         <textarea
           ref={inputRef}
           data-branch-chat-input="true"
           value={draft}
+          aria-label={t(language, "composerLabel")}
           placeholder={t(language, "composerPlaceholder")}
           onChange={(e) => onDraftChange(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
               e.preventDefault();
-              onSend();
+              if (canUseAi) {
+                onSend();
+              }
             }
           }}
         />
@@ -305,7 +319,7 @@ export function NodeDetails({
             {isPending ? (
               <button type="button" onClick={onCancel}>{t(language, "stop")}</button>
             ) : (
-              <button type="button" onClick={onSend}>{t(language, "send")}</button>
+              <button type="button" onClick={onSend} disabled={!canUseAi || !draft.trim()}>{t(language, "send")}</button>
             )}
           </div>
         </div>

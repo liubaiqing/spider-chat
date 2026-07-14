@@ -3,7 +3,7 @@
 [![GitHub release (latest)](https://img.shields.io/github/v/release/111pointer111/spider?style=flat-square)](https://github.com/111pointer111/spider/releases/latest)
 [![GitHub downloads](https://img.shields.io/github/downloads/111pointer111/spider/total?style=flat-square)](https://github.com/111pointer111/spider/releases)
 [![License](https://img.shields.io/github/license/111pointer111/spider?style=flat-square)](LICENSE)
-[![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.13.0-blueviolet?style=flat-square)](https://obsidian.md)
+[![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-blueviolet?style=flat-square)](https://obsidian.md)
 [![Status](https://img.shields.io/badge/status-awaiting%20review-orange?style=flat-square)](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
 
 > 🌏 **Other languages**: [中文文档](README.zh-CN.md)
@@ -14,7 +14,7 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 
 ![spider screenshot](.github/screenshot.png)
 
-> 🎬 **Looking for an animated demo?** A GIF should live here — record a 5-second Tab-branch interaction, save as `.github/demo.gif`, and replace the image above. See [Recording a Demo](#-recording-a-demo) for tools.
+> The screenshot shows the Chinese interface. Spider follows Obsidian's language on first install, and you can switch between Chinese and English at any time.
 
 ---
 
@@ -27,15 +27,11 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 | Done exploring, want it as notes | Copy-paste into a note, links break | Add personal node notes, then export Markdown + Canvas |
 | Want AI to live inside your docs, not a separate tab | Constant window switching | Stay in Obsidian the entire time |
 
-> **vs Copilot plugin**: Copilot is a single-thread chatbot. Spider is a multi-thread **knowledge graph** — same topic, Copilot gives you one line, Spider gives you one tree.
-
----
-
 ## ⚡ 30-Second Quick Start
 
-1. **Install**: Settings → Community plugins → Browse → search `spider` → Enable
+1. **Install**: While Community Store review is pending, install the release files manually using the steps below
 2. **Configure your API key**: Settings → Spider → fill in `apiBaseUrl` + `apiKey` + `model` (any OpenAI-compatible endpoint)
-3. **Create your first map**: Click the spider ribbon icon (or run command `Spider: New map`) → start chatting
+3. **Create your first map**: Click the Spider ribbon icon (or run command `Spider: New Spider map`) → start chatting
 4. **Try Tab-branching**: Select any text in an AI response, press `Tab` — that's it
 
 ---
@@ -83,12 +79,12 @@ Spider Maps/
 ### 🔐 Privacy & Network Disclosure
 - The plugin **requires network** to call AI, but **you fully control which endpoint**
 - **API key stays local** (Obsidian's plugin data.json); never uploaded
-- **Never reads your vault** — only sends the current node's messages + optional parent context + optional anchor text
+- **Never reads unrelated vault notes** — AI requests only include the current branch plus the context options you enable
 - **Maps are 100% local**: stored as `.spider/maps/*.json`, syncable via Obsidian Sync
 - **Offline-capable**: knowledge graph, navigation, export, history — everything works offline. Only "send message" needs network.
 
 ### 🌐 Bilingual UI
-Switch between Chinese and English any time in settings. **Export artifacts are intentionally hard-coded to Chinese** — exports are historical records and shouldn't be retroactively rewritten when the UI language changes.
+Spider follows Obsidian's language on first install. You can switch between Chinese and English at any time, and newly generated export artifacts use the current Spider interface language.
 
 ---
 
@@ -96,14 +92,14 @@ Switch between Chinese and English any time in settings. **Export artifacts are 
 
 | Key | Action |
 |---|---|
-| `Tab` | With text selected in an AI response → create child node from that anchor. Without selection → create empty child node. |
-| `Shift + Tab` | Jump to parent node |
-| `← →` | Parent ↔ first child |
-| `↑ ↓` | Move between sibling nodes |
+| `Tab` | With text selected in an AI response → create a branch from that source. On the focused map canvas → create an empty branch. |
+| `Shift + Tab` | On the focused map canvas → go to the parent branch |
+| `← →` | On the focused map canvas → parent ↔ first child |
+| `↑ ↓` | On the focused map canvas → move between sibling nodes |
 | `Enter` | Send message (inside composer) |
 | `Shift + Enter` | Newline (inside composer) |
 | `Esc` | Clear current selection |
-| `Delete` / `Backspace` | Delete current node (non-root, focus not in input) |
+| `Delete` / `Backspace` | On the focused map canvas → delete the current non-root node |
 
 ---
 
@@ -114,9 +110,9 @@ Switch between Chinese and English any time in settings. **Export artifacts are 
 | API Base URL | OpenAI-compatible endpoint | `https://api.openai.com/v1` |
 | API Key | Your API key (password input, stored locally) | — |
 | Model | Any model name your endpoint supports | `gpt-4o-mini` |
-| Interface Language | Chinese / English | English |
+| Interface Language | Chinese / English | Follows Obsidian |
 | Include parent context | Send parent title/summary/anchor with child requests | ✅ on |
-| Include full context | Also send parent's full message history (more tokens) | ❌ off |
+| Include full context | Also send other map branches as reference (more tokens) | ❌ off |
 | Stream responses | Stream tokens as they arrive | ✅ on |
 | Tab to create child nodes | Enable the Tab shortcut | ✅ on |
 | Auto-summarize nodes | AI auto-summarizes each node | ❌ off |
@@ -126,11 +122,13 @@ Switch between Chinese and English any time in settings. **Export artifacts are 
 
 ## 📥 Installation
 
-### From Community Plugin Store (recommended)
-1. Obsidian → **Settings** → **Community plugins**
-2. Turn off Safe mode (if it's on)
-3. **Browse** → search `spider` → **Install** → **Enable**
-4. Settings → **Spider** → fill in your API key and model
+### From GitHub Release (while Community Store review is pending)
+1. Download `main.js`, `manifest.json`, and `styles.css` from the latest [release](https://github.com/111pointer111/spider/releases/latest)
+2. Create `<vault>/.obsidian/plugins/spider/`
+3. Copy the three files into that directory
+4. Restart Obsidian, enable Spider under **Settings → Community plugins**, then configure your API key and model
+
+After Spider is listed in the Community Store, installation will be available directly from **Settings → Community plugins → Browse**.
 
 ### From Source (development)
 ```bash
@@ -172,19 +170,8 @@ tests/         vitest unit tests (domain + export + AI layers)
 __mocks__/     Obsidian API stub for vitest
 ```
 
-### 🎥 Recording a Demo
-
-> 🎬 Want to contribute a demo GIF?
-> 1. Record 5–10 seconds with [Kap](https://getkap.co/) (macOS) / [ScreenToGif](https://www.screentogif.com/) (Windows) / `ffmpeg` (Linux)
-> 2. Show: open spider → ask a question → select text in AI response → press `Tab` → child node appears → continue asking
-> 3. Export as GIF, save to `.github/demo.gif`
-> 4. Open a PR; we'll swap the static screenshot above for `![spider demo](.github/demo.gif)`
-
----
-
 ## 🧭 Roadmap (running list)
 
-- [ ] Full-text node search (Ctrl/Cmd+F inside the canvas)
 - [ ] Multi-select nodes + batch operations
 - [ ] Node backlinks (auto-track "which nodes reference me")
 - [ ] Custom system prompts

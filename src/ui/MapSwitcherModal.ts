@@ -1,6 +1,7 @@
 import { FuzzySuggestModal, Notice, type FuzzyMatch } from "obsidian";
 import type BranchChatMapPlugin from "../main";
-import { displayTitle, t } from "../i18n";
+import { displayTitle, nodesCountLabel, t } from "../i18n";
+import type { AppLanguage } from "../types";
 import { confirmDelete } from "./ConfirmModal";
 
 interface MapItem {
@@ -16,14 +17,14 @@ interface MapItem {
 export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
   private readonly plugin: BranchChatMapPlugin;
   private items: MapItem[] = [];
-  private language: string;
+  private language: AppLanguage;
 
   constructor(plugin: BranchChatMapPlugin) {
     super(plugin.app);
     this.plugin = plugin;
     this.language = plugin.settings.language;
-    this.emptyStateText = "No maps found.";
-    this.setPlaceholder("Switch spider map...");
+    this.emptyStateText = t(this.language, "mapSwitcherEmpty");
+    this.setPlaceholder(t(this.language, "mapSwitcherPlaceholder"));
     this.limit = 999;
   }
 
@@ -103,7 +104,7 @@ export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
 
     const metaEl = content.createDiv({ cls: "map-switcher-meta" });
     metaEl.setText([
-      t(this.plugin.settings.language, "nodesCount", { count: mapItem.nodeCount }),
+      nodesCountLabel(this.plugin.settings.language, mapItem.nodeCount),
       mapItem.updatedAt ? t(this.plugin.settings.language, "updatedAt", { time: new Date(mapItem.updatedAt).toLocaleString(this.plugin.settings.language) }) : "",
     ].filter(Boolean).join(" · "));
 
@@ -116,19 +117,19 @@ export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
     deleteBtn.setText("×");
     deleteBtn.onclick = async (e) => {
       e.stopPropagation();
-      const ok = await confirmDelete(this.plugin.app, mapItem.title);
+      const ok = await confirmDelete(this.plugin.app, this.language, mapItem.title);
       if (!ok) return;
 
       try {
         const removed = await this.plugin.store.repository.deleteMap(mapItem.id);
         if (removed) {
-          new Notice(this.language === "zh-CN" ? "图谱已删除" : "Map deleted");
+          new Notice(t(this.language, "mapDeleted"));
         } else {
-          new Notice(this.language === "zh-CN" ? "未找到该图谱文件" : "Map file not found");
+          new Notice(t(this.language, "mapFileNotFound"));
         }
       } catch (deleteError: unknown) {
         const message = deleteError instanceof Error ? deleteError.message : String(deleteError);
-        new Notice(this.language === "zh-CN" ? `删除失败：${message}` : `Delete failed: ${message}`);
+        new Notice(t(this.language, "deleteFailed", { message }));
       }
 
       await this.loadMaps();

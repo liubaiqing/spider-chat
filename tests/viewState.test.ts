@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { OpenAICompatibleProvider } from "../src/ai/openAICompatibleProvider";
 import { appendMessage, createMessage, createRootMap, addChildNode, updateNode } from "../src/domain/chatMap";
 import { ViewState } from "../src/state/viewState";
 import type BranchChatMapPlugin from "../src/main";
@@ -37,6 +38,92 @@ function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchCh
 }
 
 describe("ViewState", () => {
+  it("batches streaming bursts and preserves the final tokens without delayed updates", async () => {
+    vi.useFakeTimers();
+    let finishStream!: () => void;
+    let burstReady!: () => void;
+    const paused = new Promise<void>((resolve) => { finishStream = resolve; });
+    const ready = new Promise<void>((resolve) => { burstReady = resolve; });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "你";
+      yield "好";
+      yield "，";
+      burstReady();
+      await paused;
+      yield "世界";
+    });
+
+    try {
+      const map = createRootMap("Streaming", "Streaming");
+      const vs = createViewState(map);
+      vs.updateDraft(map.rootNodeId, "Explain streaming");
+      const updates: string[] = [];
+      vs.subscribe(() => {
+        const content = vs.getSnapshot().streamingMessages[map.rootNodeId]?.content;
+        if (content) updates.push(content);
+      });
+      const sending = vs.sendMessage();
+      await ready;
+      const messageId = vs.getSnapshot().streamingMessages[map.rootNodeId]?.id;
+      expect(messageId).toBeTruthy();
+      expect(updates).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(32);
+      expect(updates).toEqual(["你好，"]);
+
+      finishStream();
+      await sending;
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("你好，世界");
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.id).toBe(messageId);
+      expect(vs.getSnapshot().streamingMessages).toEqual({});
+      expect(vs.getSnapshot().pendingNodeId).toBeNull();
+      expect(vi.getTimerCount()).toBe(0);
+      const updateCount = updates.length;
+      await vi.runAllTimersAsync();
+      expect(updates).toHaveLength(updateCount);
+    } finally {
+      finishStream();
+      stream.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels a pending stream update while retaining the partial answer", async () => {
+    vi.useFakeTimers();
+    let stopStream!: () => void;
+    let chunkReady!: () => void;
+    const paused = new Promise<void>((resolve) => { stopStream = resolve; });
+    const ready = new Promise<void>((resolve) => { chunkReady = resolve; });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "部分回答";
+      chunkReady();
+      await paused;
+      throw new DOMException("Aborted", "AbortError");
+    });
+
+    try {
+      const map = createRootMap("Cancel streaming", "Cancel streaming");
+      const vs = createViewState(map);
+      vs.updateDraft(map.rootNodeId, "Explain streaming");
+      const sending = vs.sendMessage();
+      await ready;
+      const messageId = vs.getSnapshot().streamingMessages[map.rootNodeId]?.id;
+      vs.cancelGeneration();
+      await vi.advanceTimersByTimeAsync(32);
+      expect(vs.getSnapshot().streamingMessages[map.rootNodeId]?.content).toBe("");
+      stopStream();
+      await sending;
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("部分回答");
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.id).toBe(messageId);
+      expect(vs.getSnapshot().streamingMessages).toEqual({});
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      stopStream();
+      stream.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps full anchor text but truncates the child draft prompt", () => {
     const map = createRootMap("Long anchor");
     const vs = createViewState(map);

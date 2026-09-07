@@ -8,6 +8,7 @@ import { BranchChatMapApp, type BranchChatMapController } from "./ui/BranchChatM
 import { BranchChatMapChatApp } from "./ui/BranchChatMapChatApp";
 import type { ViewState } from "./state/viewState";
 import type { ChatMapId } from "./types";
+import { shouldHandleViewKeydown } from "./ui/keyboardShortcuts";
 
 abstract class BranchChatMapBaseView extends ItemView {
   protected readonly plugin: BranchChatMapPlugin;
@@ -43,13 +44,19 @@ abstract class BranchChatMapBaseView extends ItemView {
       }),
     );
 
-    this.registerDomEvent(
-      this.contentEl,
-      "keydown",
-      (event) => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (shouldHandleViewKeydown(event, this.contentEl)) {
         this.controller?.handleKeydown(event);
-      },
-    );
+      }
+    };
+    let doc = this.contentEl.ownerDocument;
+    doc.addEventListener("keydown", handleKeydown, true);
+    this.register(this.contentEl.onWindowMigrated(() => {
+      doc.removeEventListener("keydown", handleKeydown, true);
+      doc = this.contentEl.ownerDocument;
+      doc.addEventListener("keydown", handleKeydown, true);
+    }));
+    this.register(() => doc.removeEventListener("keydown", handleKeydown, true));
   }
 
   async onClose(): Promise<void> {

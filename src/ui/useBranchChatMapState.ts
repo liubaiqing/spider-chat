@@ -9,7 +9,7 @@ const INITIAL_STATE: BranchChatMapState = {
   collapsedIds: new Set(),
   drafts: {},
   pendingNodeId: null,
-  streamingContent: {},
+  streamingMessages: {},
   error: null,
   errorDetails: null,
   focusToken: 0,

@@ -16,7 +16,7 @@ export interface BranchChatMapState {
   collapsedIds: Set<NodeId>;
   drafts: Record<NodeId, string>;
   pendingNodeId: NodeId | null;
-  streamingContent: Record<NodeId, string>;
+  streamingMessages: Record<NodeId, ChatMessage>;
   error: string | null;
   errorDetails: string | null;
   focusToken: number;
@@ -29,7 +29,7 @@ const INITIAL_STATE: BranchChatMapState = {
   collapsedIds: new Set(),
   drafts: {},
   pendingNodeId: null,
-  streamingContent: {},
+  streamingMessages: {},
   error: null,
   errorDetails: null,
   focusToken: 0,
@@ -62,7 +62,7 @@ export class ViewState {
         collapsedIds: new Set(),
         drafts: {},
         pendingNodeId: null,
-        streamingContent: {},
+        streamingMessages: {},
         error: null,
         errorDetails: null,
         focusToken: 0,
@@ -546,7 +546,7 @@ export class ViewState {
         collapsedIds: new Set(),
         drafts: {},
         pendingNodeId: null,
-        streamingContent: {},
+        streamingMessages: {},
         error: null,
         errorDetails: null,
         focusToken: 0,
@@ -565,7 +565,7 @@ export class ViewState {
       collapsedIds: new Set(),
       drafts: {},
       pendingNodeId: null,
-      streamingContent: {},
+      streamingMessages: {},
       error: null,
       errorDetails: null,
       focusToken: 0,
@@ -614,18 +614,30 @@ export class ViewState {
     }
 
     const controller = new AbortController();
+    const assistantMessage = createMessage("assistant", "");
     this.abortController = controller;
     this.setState({
       pendingNodeId: nodeId,
       error: null,
       errorDetails: null,
-      streamingContent: {
-        ...this.state.streamingContent,
-        [nodeId]: "",
+      streamingMessages: {
+        ...this.state.streamingMessages,
+        [nodeId]: assistantMessage,
       },
     });
 
     let answer = "";
+    let streamUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+    const publishStream = () => {
+      streamUpdateTimer = undefined;
+      if (controller.signal.aborted || this.abortController !== controller) return;
+      this.setState({
+        streamingMessages: {
+          ...this.state.streamingMessages,
+          [nodeId]: { ...assistantMessage, content: answer },
+        },
+      });
+    };
 
     try {
       const provider = new OpenAICompatibleProvider(this.plugin.settings);
@@ -644,13 +656,11 @@ export class ViewState {
           signal: controller.signal,
         })) {
           answer += chunk;
-          this.setState({
-            streamingContent: {
-              ...this.state.streamingContent,
-              [nodeId]: answer,
-            },
-          });
+          // Batch token bursts before notifying React and rendering Markdown.
+          streamUpdateTimer ??= setTimeout(publishStream, 32);
         }
+        clearTimeout(streamUpdateTimer);
+        publishStream();
       } else {
         answer = await provider.chat({
           node: requestNode,
@@ -661,14 +671,14 @@ export class ViewState {
           signal: controller.signal,
         });
         this.setState({
-          streamingContent: {
-            ...this.state.streamingContent,
-            [nodeId]: answer,
+          streamingMessages: {
+            ...this.state.streamingMessages,
+            [nodeId]: { ...assistantMessage, content: answer },
           },
         });
       }
 
-      let nextMap = appendMessage(baseMap, nodeId, createMessage("assistant", answer));
+      let nextMap = appendMessage(baseMap, nodeId, { ...assistantMessage, content: answer });
       const updatedNode = nextMap.nodes[nodeId];
       if (this.plugin.settings.autoSummarizeNodes && updatedNode) {
         const summary = await provider.summarizeNode(updatedNode, controller.signal);
@@ -695,17 +705,18 @@ export class ViewState {
       if (controller.signal.aborted) {
         const partial = answer.trim();
         if (partial) {
-          this.commitMap(appendMessage(baseMap, nodeId, createMessage("assistant", partial)));
+          this.commitMap(appendMessage(baseMap, nodeId, { ...assistantMessage, content: partial }));
           new Notice(t(this.plugin.settings.language, "generationStoppedWithPartial"));
         }
       } else {
         this.reportError(generateError);
       }
     } finally {
-      const streamingContent = { ...this.state.streamingContent };
-      delete streamingContent[nodeId];
+      clearTimeout(streamUpdateTimer);
+      const streamingMessages = { ...this.state.streamingMessages };
+      delete streamingMessages[nodeId];
       this.setState({
-        streamingContent,
+        streamingMessages,
         pendingNodeId: null,
       });
       this.abortController = null;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { App } from "obsidian";
 import { displayTitle, nodeStatsLabel, roleLabel, t } from "../i18n";
-import type { AppLanguage, ChatNode, ChatNodeStatus, NodeId } from "../types";
+import type { AppLanguage, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { OnboardingCard } from "./OnboardingCard";
 import type { OnboardingGuideVariant } from "./onboarding";
@@ -20,7 +20,7 @@ interface NodeDetailsProps {
   canUseAi: boolean;
   language: AppLanguage;
   onboardingVariant: OnboardingGuideVariant | null;
-  streamingContent: string;
+  streamingMessage?: ChatMessage;
   onCancel(this: void): void;
   onCreateChild(this: void): void;
   onDeleteNode(this: void, nodeId: NodeId): void;
@@ -71,7 +71,7 @@ export function NodeDetails({
   canUseAi,
   language,
   onboardingVariant,
-  streamingContent,
+  streamingMessage,
   onCancel,
   onCreateChild,
   onDeleteNode,
@@ -94,6 +94,10 @@ export function NodeDetails({
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [titleDraft, setTitleDraft] = useState(displayTitle(language, node.title));
   const sourcePath = `spider/${node.id}.md`;
+  const pendingMessage = streamingMessage?.content && !node.messages.some((message) => message.id === streamingMessage.id)
+    ? streamingMessage
+    : undefined;
+  const messages = pendingMessage ? [...node.messages, pendingMessage] : node.messages;
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
@@ -118,6 +122,11 @@ export function NodeDetails({
     setShowScrollBottom(toBottom > 40);
   }, []);
 
+  const handleMarkdownRendered = useCallback(() => {
+    if (stickToBottomRef.current) scrollToBottom("auto");
+    updateScrollState();
+  }, [scrollToBottom, updateScrollState]);
+
   const commitTitle = useCallback(() => {
     const nextTitle = titleDraft.trim();
     if (nextTitle && nextTitle !== node.title) {
@@ -135,12 +144,6 @@ export function NodeDetails({
     const frame = window.requestAnimationFrame(() => scrollToBottom("auto"));
     return () => window.cancelAnimationFrame(frame);
   }, [node.id, scrollToBottom]);
-
-  useEffect(() => {
-    if (!stickToBottomRef.current) return undefined;
-    const frame = window.requestAnimationFrame(() => scrollToBottom(streamingContent ? "auto" : "smooth"));
-    return () => window.cancelAnimationFrame(frame);
-  }, [node.messages.length, scrollToBottom, streamingContent]);
 
   useEffect(() => {
     if (node.messages.length === 0) {
@@ -222,27 +225,21 @@ export function NodeDetails({
           </section>
         ) : null}
 
-        {node.messages.length === 0 && !streamingContent ? (
+        {messages.length === 0 ? (
           <div className="bcm-empty">
             {t(language, "emptyHint")}
           </div>
         ) : (
           <>
-            {node.messages.map((message) => (
-              <article className={`bcm-message bcm-message-${message.role}`} key={message.id}>
-                <div className="bcm-message-meta">{roleLabel(language, message.role)}</div>
-                <MarkdownContent app={app} markdown={message.content} sourcePath={sourcePath} className="bcm-message-content markdown-rendered" />
-              </article>
-            ))}
-            {streamingContent ? (
-              <article className="bcm-message bcm-message-assistant bcm-message-streaming">
-                <div className="bcm-message-meta">{t(language, "streaming")}</div>
-                <div className="bcm-streaming-content">
-                  <MarkdownContent app={app} markdown={streamingContent} sourcePath={sourcePath} className="bcm-message-content markdown-rendered" />
-                  <span className="bcm-caret" />
+            {messages.map((message) => (
+              <article className={`bcm-message bcm-message-${message.role}${message === pendingMessage ? " bcm-message-streaming" : ""}`} key={message.id}>
+                <div className="bcm-message-meta">{message === pendingMessage ? t(language, "streaming") : roleLabel(language, message.role)}</div>
+                <div className="bcm-message-content bcm-streaming-content">
+                  <MarkdownContent app={app} markdown={message.content} sourcePath={sourcePath} className="bcm-message-content markdown-rendered" onRendered={handleMarkdownRendered} />
+                  {message === pendingMessage ? <span className="bcm-caret" /> : null}
                 </div>
               </article>
-            ) : null}
+            ))}
             {onboardingVariant === "branch" ? (
               <OnboardingCard language={language} variant="branch" onDismiss={onDismissOnboarding} />
             ) : null}

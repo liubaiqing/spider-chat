@@ -11,7 +11,7 @@ import { MapGallery } from "./MapGallery";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
 import type { ViewState } from "../state/viewState";
 import type { ChatMapId, NodeId } from "../types";
-import { shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
+import { getSelectionInside, shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 import { SearchResultItem } from "./SearchResultItem";
 
 export interface BranchChatMapController {
@@ -30,36 +30,6 @@ interface BranchChatMapAppProps {
   setTabTitle(this: void, title: string): void;
   onNewSpider(this: void): void;
   onLoadMap(this: void, mapId: ChatMapId): void;
-}
-
-export function getSelectionInside(root: HTMLElement | null, doc?: Document): string | undefined {
-  if (!root) {
-    return undefined;
-  }
-
-  const documentRef = doc || activeDocument;
-  const active = documentRef.activeElement;
-
-  if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT") && root.contains(active)) {
-    const el = active as HTMLInputElement | HTMLTextAreaElement;
-    const text = el.value.substring(el.selectionStart ?? 0, el.selectionEnd ?? 0).trim();
-    if (text) {
-      return text;
-    }
-  }
-
-  const selection = documentRef.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    return undefined;
-  }
-
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) {
-    return undefined;
-  }
-
-  const text = selection.toString().trim();
-  return text || undefined;
 }
 
 function openMapSwitcher(plugin: BranchChatMapPlugin): void {
@@ -147,8 +117,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const createChild = useCallback(
     (anchorText?: string) => {
-      const doc = activeDocument;
-      const selectedText = anchorText?.trim() || getSelectionInside(rootRef.current, doc);
+      const selectedText = anchorText?.trim() || getSelectionInside(rootRef.current);
       viewState.createChild(selectedText);
       if (selectedText) {
         new Notice(t(language, "onboardingChildCreatedNotice"));
@@ -167,11 +136,12 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const handleKeydown = useCallback(
     (event: KeyboardEvent) => {
-      const selectedText = getSelectionInside(rootRef.current, activeDocument);
+      const selectedText = getSelectionInside(rootRef.current);
       if (shouldCreateBranchFromTab(event, settings.useTabToCreateChildNodes, Boolean(selectedText))) {
         event.preventDefault();
         event.stopPropagation();
         createChild(selectedText);
+        rootRef.current?.ownerDocument.getSelection()?.removeAllRanges();
         return;
       }
 
@@ -183,7 +153,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
       }
 
       if (event.key === "Escape") {
-        window.getSelection()?.removeAllRanges();
+        rootRef.current?.ownerDocument.getSelection()?.removeAllRanges();
         return;
       }
 

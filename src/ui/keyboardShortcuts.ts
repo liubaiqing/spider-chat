@@ -32,8 +32,34 @@ function hasUnsupportedModifier(event: KeyboardEvent): boolean {
   return event.metaKey || event.ctrlKey || event.altKey;
 }
 
+export function getSelectionInside(root: HTMLElement | null): string | undefined {
+  if (!root) return undefined;
+
+  const doc = root.ownerDocument;
+  const active = doc.activeElement;
+  if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT") && root.contains(active)) {
+    const input = active as HTMLInputElement | HTMLTextAreaElement;
+    return input.value.substring(input.selectionStart ?? 0, input.selectionEnd ?? 0).trim() || undefined;
+  }
+
+  const selection = doc.getSelection();
+  if (!selection?.rangeCount || !root.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+    return undefined;
+  }
+  return selection.toString().trim() || undefined;
+}
+
+export function shouldHandleViewKeydown(event: KeyboardEvent, root: HTMLElement): boolean {
+  if (event.defaultPrevented) return false;
+  const doc = root.ownerDocument;
+  const isDocumentTarget = event.target === doc || event.target === doc.body || event.target === doc.documentElement;
+  // Selecting non-focusable answer text can leave keyboard focus on the document body.
+  return root.contains(event.target as Node | null)
+    || (isDocumentTarget && event.key === "Tab" && Boolean(getSelectionInside(root)));
+}
+
 export function shouldCreateBranchFromTab(event: KeyboardEvent, enabled: boolean, hasSelection: boolean): boolean {
-  if (!enabled || event.key !== "Tab" || event.shiftKey || hasUnsupportedModifier(event) || isInteractiveTarget(event.target)) {
+  if (!enabled || event.defaultPrevented || event.isComposing || event.key !== "Tab" || event.shiftKey || hasUnsupportedModifier(event) || isInteractiveTarget(event.target)) {
     return false;
   }
   return hasSelection || isCanvasTarget(event.target);

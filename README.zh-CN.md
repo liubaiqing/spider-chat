@@ -60,11 +60,15 @@ Spider Maps/
   ├── index.md                  # Obsidian 入口笔记
   ├── brief.md                  # 关键结论、待研究问题与进度
   ├── nodes/                    # 每个节点一份独立 md
-  └── map.canvas                # 可视化知识图谱
+  ├── map.canvas                # 可编辑知识图谱
+  └── map.svg                   # 可缩放、可分享的知识图谱图片
 ```
 
 - Canvas 节点带颜色编码（紫色=根 / 绿色=已理解 / 灰色=已归档 / 蓝色=进行中）
-- 边带标签（锚点文字 / 首个问题摘要），方向箭头清晰
+- Canvas 直接展示概念标题、短摘要和完整笔记链接，节点之间预留清晰间距
+- 沿箭头阅读分支，原文锚点保留在笔记中，避免长标签遮挡图谱
+- SVG 保留同样的疏朗布局，缩小时仍显示标题和摘要，放大不失真
+- 重复导出会新建带序号的快照目录，保留之前的导出和手写补充
 - Markdown 之间双向链接 + 回链，构建完整思考链
 
 ### 🔌 兼容任何 OpenAI 兼容 API
@@ -161,7 +165,7 @@ npm run link       # 把构建产物 symlink 到 vault
 src/
   ai/          OpenAI 兼容 API provider（流式 + 同步 + summarize）
   domain/      ChatMap 不可变工厂 + 树操作 + 守卫 + Dagre 布局
-  export/      Markdown / Mermaid / Canvas / JSON 四种格式导出
+  export/      Markdown / Mermaid / Canvas / SVG / JSON 格式导出
   state/       多视图会话管理 + 单会话 ViewState
   storage/     Vault 内 JSON 持久化（兼容旧目录）
   ui/          React 组件（图、聊天面板、画廊、弹窗）

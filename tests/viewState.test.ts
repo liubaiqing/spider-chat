@@ -38,6 +38,92 @@ function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchCh
 }
 
 describe("ViewState", () => {
+  it("preserves new branches, notes, and status while streaming and generating metadata", async () => {
+    let finishStream!: () => void;
+    let streamReady!: () => void;
+    let finishTitle!: (title: string) => void;
+    let titleReady!: () => void;
+    const streamPaused = new Promise<void>((resolve) => { finishStream = resolve; });
+    const firstChunk = new Promise<void>((resolve) => { streamReady = resolve; });
+    const titlePaused = new Promise<string>((resolve) => { finishTitle = resolve; });
+    const titleStarted = new Promise<void>((resolve) => { titleReady = resolve; });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "部分回答";
+      streamReady();
+      await streamPaused;
+      yield "，完成";
+    });
+    const title = vi.spyOn(OpenAICompatibleProvider.prototype, "titleNode").mockImplementation(() => {
+      titleReady();
+      return titlePaused;
+    });
+
+    try {
+      const map = createRootMap();
+      const vs = createViewState(map);
+      vs.updateDraft(map.rootNodeId, "Explain branching");
+      const sending = vs.sendMessage();
+      await firstChunk;
+      vs.createChild("部分回答");
+      const childId = vs.getSnapshot().activeNodeId!;
+      vs.updateNodeNote(map.rootNodeId, "流式期间的理解");
+      vs.markUnderstood();
+      finishStream();
+      await titleStarted;
+      vs.updateNodeNote(map.rootNodeId, "等待标题期间的新理解");
+      finishTitle("分支探索");
+      await sending;
+
+      const snapshot = vs.getSnapshot();
+      expect(snapshot.map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("部分回答，完成");
+      expect(snapshot.map?.nodes[map.rootNodeId]?.note).toBe("等待标题期间的新理解");
+      expect(snapshot.map?.nodes[map.rootNodeId]?.children).toContain(childId);
+      expect(snapshot.map?.nodes[childId]?.status).toBe("understood");
+      expect(snapshot.map?.edges.some((edge) => edge.from === map.rootNodeId && edge.to === childId)).toBe(true);
+      expect(snapshot.map?.title).toBe("分支探索");
+      expect(snapshot.activeNodeId).toBe(childId);
+    } finally {
+      finishStream();
+      finishTitle("分支探索");
+      stream.mockRestore();
+      title.mockRestore();
+    }
+  });
+
+  it.each(["delete-node", "switch-map"])("does not restore stale streaming results after %s", async (action) => {
+    let finishStream!: () => void;
+    let streamReady!: () => void;
+    const paused = new Promise<void>((resolve) => { finishStream = resolve; });
+    const ready = new Promise<void>((resolve) => { streamReady = resolve; });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "部分回答";
+      streamReady();
+      await paused;
+      yield "，完成";
+    });
+    try {
+      const map = createRootMap("Existing", "Existing");
+      const { map: withChild, child } = addChildNode(map, map.rootNodeId, { title: "Child" });
+      const vs = createViewState(withChild);
+      vs.setActiveNode(child.id);
+      vs.updateDraft(child.id, "Explain branching");
+      const sending = vs.sendMessage();
+      await ready;
+      if (action === "delete-node") vs.deleteNode(child.id);
+      else await vs.createNewRootMap();
+      const expectedMap = vs.getSnapshot().map;
+      finishStream();
+      await sending;
+      expect(vs.getSnapshot().map).toBe(expectedMap);
+      expect(vs.getSnapshot().map?.nodes[child.id]).toBeUndefined();
+      expect(vs.getSnapshot().error).toBeNull();
+      expect(vs.getSnapshot().streamingMessages).toEqual({});
+    } finally {
+      finishStream();
+      stream.mockRestore();
+    }
+  });
+
   it("batches streaming bursts and preserves the final tokens without delayed updates", async () => {
     vi.useFakeTimers();
     let finishStream!: () => void;
@@ -108,6 +194,9 @@ describe("ViewState", () => {
       const sending = vs.sendMessage();
       await ready;
       const messageId = vs.getSnapshot().streamingMessages[map.rootNodeId]?.id;
+      vs.createChild("部分回答");
+      const childId = vs.getSnapshot().activeNodeId!;
+      vs.updateNodeNote(map.rootNodeId, "停止前写下的理解");
       vs.cancelGeneration();
       await vi.advanceTimersByTimeAsync(32);
       expect(vs.getSnapshot().streamingMessages[map.rootNodeId]?.content).toBe("");
@@ -115,6 +204,8 @@ describe("ViewState", () => {
       await sending;
       expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("部分回答");
       expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1)?.id).toBe(messageId);
+      expect(vs.getSnapshot().map?.nodes[childId]).toBeDefined();
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.note).toBe("停止前写下的理解");
       expect(vs.getSnapshot().streamingMessages).toEqual({});
       expect(vi.getTimerCount()).toBe(0);
     } finally {

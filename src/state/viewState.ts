@@ -219,11 +219,13 @@ export class ViewState {
     try {
       const provider = new OpenAICompatibleProvider(this.plugin.settings);
       const summary = await provider.summarizeNode(node, controller.signal);
-      this.commitMap(updateNode(this.state.map ?? map, activeNodeId, { summary }));
+      const currentMap = this.state.map;
+      if (controller.signal.aborted || currentMap?.id !== map.id || !currentMap.nodes[activeNodeId]) return;
+      this.commitMap(updateNode(currentMap, activeNodeId, { summary }));
     } catch (summaryError: unknown) {
       this.reportError(summaryError);
     } finally {
-      this.abortController = null;
+      if (this.abortController === controller) this.abortController = null;
     }
   }
 
@@ -261,11 +263,10 @@ export class ViewState {
 
     try {
       const exportMap = await this.prepareMapForExport(map);
-      const folder = `${this.plugin.settings.defaultExportFolder}/${this.exportFolderName(exportMap)}`;
+      const folder = await this.repository.createExportFolder(`${this.plugin.settings.defaultExportFolder}/${this.exportFolderName(exportMap)}`);
       const files = buildExportFiles(exportMap, { exportFolder: folder, language: this.plugin.settings.language });
       let entryPath = "";
 
-      await this.repository.resetExportFolder(folder);
       for (const file of files) {
         const path = await this.repository.writeExport(folder, file.path, file.content);
         if (file.path === "index.md") {
@@ -628,9 +629,14 @@ export class ViewState {
 
     let answer = "";
     let streamUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+    const currentMap = () => {
+      const map = this.state.map;
+      return map?.id === baseMap.id && map.nodes[nodeId]
+        && this.state.streamingMessages[nodeId]?.id === assistantMessage.id ? map : null;
+    };
     const publishStream = () => {
       streamUpdateTimer = undefined;
-      if (controller.signal.aborted || this.abortController !== controller) return;
+      if (controller.signal.aborted || this.abortController !== controller || !currentMap()) return;
       this.setState({
         streamingMessages: {
           ...this.state.streamingMessages,
@@ -670,56 +676,64 @@ export class ViewState {
           includeParentContext: this.plugin.settings.includeParentContext,
           signal: controller.signal,
         });
-        this.setState({
-          streamingMessages: {
-            ...this.state.streamingMessages,
-            [nodeId]: { ...assistantMessage, content: answer },
-          },
-        });
+        publishStream();
       }
 
-      let nextMap = appendMessage(baseMap, nodeId, { ...assistantMessage, content: answer });
-      const updatedNode = nextMap.nodes[nodeId];
+      controller.signal.throwIfAborted();
+      let latestMap = currentMap();
+      if (!latestMap) return;
+      // Commit the answer to the live map before optional AI metadata requests.
+      this.commitMap(appendMessage(latestMap, nodeId, { ...assistantMessage, content: answer }));
+      const updatedNode = this.state.map?.nodes[nodeId];
       if (this.plugin.settings.autoSummarizeNodes && updatedNode) {
         const summary = await provider.summarizeNode(updatedNode, controller.signal);
-        nextMap = updateNode(nextMap, nodeId, { summary });
+        controller.signal.throwIfAborted();
+        latestMap = currentMap();
+        if (!latestMap) return;
+        this.commitMap(updateNode(latestMap, nodeId, { summary }));
       }
 
-      const titleNode = nextMap.nodes[nodeId];
-      if (titleNode && this.shouldAutoTitle(titleNode, nextMap)) {
+      latestMap = currentMap();
+      if (!latestMap) return;
+      const titleNode = latestMap.nodes[nodeId];
+      if (titleNode && this.shouldAutoTitle(titleNode, latestMap)) {
         try {
           const title = this.normalizeGeneratedTitle(await provider.titleNode(titleNode, controller.signal));
-          if (title) {
-            nextMap = updateNode(nextMap, nodeId, { title });
+          latestMap = currentMap();
+          const currentNode = latestMap?.nodes[nodeId];
+          if (title && !controller.signal.aborted && latestMap && currentNode?.title === titleNode.title) {
+            let nextMap = updateNode(latestMap, nodeId, { title });
             if (nodeId === nextMap.rootNodeId) {
               nextMap = updateMapTitle(nextMap, title);
             }
+            this.commitMap(nextMap);
           }
         } catch {
           // Naming is helpful, but it should never discard the completed answer.
         }
       }
-
-      this.commitMap(nextMap);
     } catch (generateError: unknown) {
       if (controller.signal.aborted) {
         const partial = answer.trim();
-        if (partial) {
-          this.commitMap(appendMessage(baseMap, nodeId, { ...assistantMessage, content: partial }));
+        const latestMap = currentMap();
+        if (partial && latestMap && !latestMap.nodes[nodeId]?.messages.some((message) => message.id === assistantMessage.id)) {
+          this.commitMap(appendMessage(latestMap, nodeId, { ...assistantMessage, content: partial }));
           new Notice(t(this.plugin.settings.language, "generationStoppedWithPartial"));
         }
-      } else {
+      } else if (currentMap()) {
         this.reportError(generateError);
       }
     } finally {
       clearTimeout(streamUpdateTimer);
-      const streamingMessages = { ...this.state.streamingMessages };
-      delete streamingMessages[nodeId];
-      this.setState({
-        streamingMessages,
-        pendingNodeId: null,
-      });
-      this.abortController = null;
+      if (this.state.streamingMessages[nodeId]?.id === assistantMessage.id) {
+        const streamingMessages = { ...this.state.streamingMessages };
+        delete streamingMessages[nodeId];
+        this.setState({
+          streamingMessages,
+          pendingNodeId: this.state.pendingNodeId === nodeId ? null : this.state.pendingNodeId,
+        });
+      }
+      if (this.abortController === controller) this.abortController = null;
     }
   }
 
@@ -757,7 +771,10 @@ export class ViewState {
         return map;
       }
 
-      const titledMap = updateMapTitle(updateNode(map, root.id, { title }), title);
+      const currentMap = this.state.map;
+      if (currentMap?.id !== map.id || !currentMap.nodes[root.id]) return map;
+      if (currentMap.nodes[root.id]?.title !== root.title) return currentMap;
+      const titledMap = updateMapTitle(updateNode(currentMap, root.id, { title }), title);
       this.commitMap(titledMap);
       return titledMap;
     } catch {

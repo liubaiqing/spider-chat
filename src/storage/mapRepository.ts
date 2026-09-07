@@ -142,12 +142,18 @@ export class MapRepository {
     return path;
   }
 
-  async resetExportFolder(folder: string): Promise<void> {
+  async createExportFolder(folder: string): Promise<string> {
     const cleanFolder = normalizePath(folder);
-    if (await this.app.vault.adapter.exists(cleanFolder)) {
-      await this.app.vault.adapter.rmdir(cleanFolder, true);
+    let destination = cleanFolder;
+    let suffix = 2;
+    while (await this.app.vault.adapter.exists(destination)) {
+      destination = `${cleanFolder}-${suffix++}`;
     }
-    await this.ensureFolder(cleanFolder);
+    const parent = cleanFolder.split("/").slice(0, -1).join("/");
+    await this.ensureFolder(parent);
+    // Create exclusively: a concurrent export must fail instead of overwriting another snapshot.
+    await this.app.vault.createFolder(destination);
+    return destination;
   }
 
   private mapPath(map: ChatMap): string {

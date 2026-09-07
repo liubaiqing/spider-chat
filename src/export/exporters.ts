@@ -1,9 +1,10 @@
 import type { AppLanguage, ChatMap, ChatMessage, ChatNode } from "../types";
-import { escapeMermaid, slugifyFileName } from "../utils/text";
+import { cleanText, escapeMermaid, markdownToPlainText, slugifyFileName } from "../utils/text";
+import { renderGraphSvg } from "./graphSvg";
 
 type CanvasSide = "top" | "right" | "bottom" | "left";
 type CanvasEnd = "none" | "arrow";
-type CanvasColor = "1" | "2" | "3" | "4" | "5" | "6";
+type CanvasColor = "1" | "2" | "3" | "4" | "5" | "6" | `#${string}`;
 
 interface JsonCanvasBaseNode {
   id: string;
@@ -62,16 +63,16 @@ interface CanvasPosition {
   depth: number;
 }
 
-const CANVAS_NODE_WIDTH = 360;
-const CANVAS_NODE_HEIGHT = 220;
-const CANVAS_COLUMN_GAP = 520;
-const CANVAS_ROW_GAP = 300;
-const CANVAS_GROUP_PADDING = 70;
-const CANVAS_OVERVIEW_WIDTH = 460;
-const CANVAS_OVERVIEW_HEIGHT = 260;
+const CANVAS_NODE_WIDTH = 400;
+const CANVAS_NODE_HEIGHT = 320;
+const CANVAS_COLUMN_GAP = CANVAS_NODE_WIDTH + 220;
+const CANVAS_ROW_GAP = CANVAS_NODE_HEIGHT + 120;
+const CANVAS_OVERVIEW_WIDTH = 800;
+const CANVAS_OVERVIEW_HEIGHT = 200;
 
 interface ExportLabels {
   ai: string;
+  answerExcerpt: string;
   anchor: string;
   archived: string;
   canvasCard: string;
@@ -88,6 +89,7 @@ interface ExportLabels {
   explorationPath: string;
   fileStructure: string;
   fullConversationHint: string;
+  graphImage: string;
   graphHome: string;
   generatedAt: string;
   indexEntry: string;
@@ -109,6 +111,7 @@ interface ExportLabels {
   nodeSummary: string;
   nodesFolder: string;
   open: string;
+  openFullNote: string;
   openQuestions: string;
   overview: string;
   parent: string;
@@ -132,6 +135,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
   if (language === "en") {
     return {
       ai: "AI",
+      answerExcerpt: "Answer excerpt",
       anchor: "Anchor",
       archived: "Archived",
       canvasCard: "Canvas card",
@@ -147,7 +151,8 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       exportedPackage: "spider export package",
       explorationPath: "Exploration path",
       fileStructure: "File structure",
-      fullConversationHint: "Start at the root question, follow arrows for child questions, and open each Markdown file for the full conversation.",
+      fullConversationHint: "Follow the arrows from left to right. Each card links to its complete notes and conversation.",
+      graphImage: "Knowledge map image",
       graphHome: "Map home",
       generatedAt: "Generated",
       indexEntry: "Obsidian entry note",
@@ -169,6 +174,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       nodeSummary: "Node summary",
       nodesFolder: "One Markdown file per node",
       open: "Open",
+      openFullNote: "Open full note ↗",
       openQuestions: "Open questions",
       overview: "Overview",
       parent: "Parent",
@@ -191,6 +197,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
 
   return {
     ai: "AI",
+    answerExcerpt: "回答节选",
     anchor: "原文锚点",
     archived: "已归档",
     canvasCard: "Canvas 卡片",
@@ -206,7 +213,8 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     exportedPackage: "spider 导出包",
     explorationPath: "探索路径",
     fileStructure: "文件结构",
-    fullConversationHint: "从根问题开始，沿箭头阅读每个子问题。节点卡片只展示摘要，完整对话请打开对应 Markdown 文件。",
+    fullConversationHint: "从左向右，沿箭头探索。点击卡片中的笔记链接，继续阅读完整对话。",
+    graphImage: "知识图谱图片",
     graphHome: "图谱首页",
     generatedAt: "生成时间",
     indexEntry: "Obsidian 内的图谱首页",
@@ -228,6 +236,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     nodeSummary: "节点总结",
     nodesFolder: "每个节点的完整对话记录",
     open: "进行中",
+    openFullNote: "打开完整笔记 ↗",
     openQuestions: "待研究问题",
     overview: "总览",
     parent: "父节点",
@@ -345,7 +354,8 @@ function joinExportPath(...parts: Array<string | undefined>): string {
 }
 
 function markdownLink(label: string, path: string): string {
-  return `[${label}](${encodeURI(path).replaceAll("%2F", "/")})`;
+  const target = path.split("/").map((part) => encodeURIComponent(part).replace(/[()]/g, (char) => char === "(" ? "%28" : "%29")).join("/");
+  return `[${label}](${target})`;
 }
 
 function tableCell(value: string): string {
@@ -374,14 +384,10 @@ function nodeCanvasColor(node: ChatNode, isRoot: boolean): CanvasColor {
   }
 
   if (node.status === "archived") {
-    return "2";
+    return "#9ca3af";
   }
 
   return "5";
-}
-
-function edgeLabel(node: ChatNode): string {
-  return truncateForExport(node.anchorText || firstUserQuestion(node) || "追问", 18);
 }
 
 function truncateForExport(value: string, maxLength: number): string {
@@ -391,6 +397,39 @@ function truncateForExport(value: string, maxLength: number): string {
   }
 
   return `${clean.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function canvasPlainText(value: string): string {
+  return value.replace(/[\\`*_[\]<>#~]/g, "\\$&");
+}
+
+function graphCardContent(node: ChatNode, labels: ExportLabels) {
+  const answer = node.messages.filter((message) => message.role === "assistant" && message.content.trim()).at(-1);
+  const preview = node.note?.trim() || node.summary?.trim() || answer?.content || firstUserQuestion(node) || node.anchorText?.trim();
+  const previewLabel = node.note?.trim() ? labels.personalNote
+    : node.summary?.trim() ? labels.nodeSummary
+    : answer ? labels.answerExcerpt : labels.question;
+
+  return {
+    title: cleanText(node.title),
+    statusLabel: nodeStatusLabel(node, labels),
+    previewLabel: preview ? previewLabel : "",
+    preview: preview ? truncateForExport(markdownToPlainText(preview), 100) : labels.noConversation,
+  };
+}
+
+function canvasCardText(node: ChatNode, labels: ExportLabels, filePath: string): string {
+  const content = graphCardContent(node, labels);
+  return [
+    `### ${canvasPlainText(truncateForExport(content.title, 40))}`,
+    "",
+    content.statusLabel,
+    "",
+    ...(content.previewLabel ? [`**${content.previewLabel}**`, ""] : []),
+    canvasPlainText(content.preview),
+    "",
+    markdownLink(labels.openFullNote, filePath),
+  ].join("\n");
 }
 
 function buildResearchBrief(
@@ -657,34 +696,6 @@ function buildCanvasLayout(map: ChatMap, nodes: ChatNode[]): Map<string, CanvasP
   return positions;
 }
 
-function buildCanvasGroups(positions: Map<string, CanvasPosition>, labels: ExportLabels): JsonCanvasGroupNode[] {
-  const byDepth = new Map<number, CanvasPosition[]>();
-  for (const position of positions.values()) {
-    const level = byDepth.get(position.depth) ?? [];
-    level.push(position);
-    byDepth.set(position.depth, level);
-  }
-
-  return [...byDepth.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([depth, level]) => {
-      const minY = Math.min(...level.map((position) => position.y));
-      const maxY = Math.max(...level.map((position) => position.y));
-      const x = depth * CANVAS_COLUMN_GAP - CANVAS_GROUP_PADDING;
-
-      return {
-        id: `group-depth-${depth}`,
-        type: "group",
-        label: depth === 0 ? labels.rootQuestion : labels.languageDepth(depth),
-        x,
-        y: minY - CANVAS_GROUP_PADDING,
-        width: CANVAS_NODE_WIDTH + CANVAS_GROUP_PADDING * 2,
-        height: maxY - minY + CANVAS_NODE_HEIGHT + CANVAS_GROUP_PADDING * 2,
-        color: depth === 0 ? "6" : "5",
-      };
-    });
-}
-
 function canvasNodeFilePath(fileName: string, options: ExportCanvasOptions): string {
   return joinExportPath(options.exportFolder, "nodes", fileName);
 }
@@ -715,33 +726,26 @@ export function exportCanvas(map: ChatMap, options: ExportCanvasOptions = {}): s
   const nodes = walkNodes(map);
   const nodeFileNames = new Map(nodes.map((node, index) => [node.id, nodeFileName(index, node)]));
   const positions = buildCanvasLayout(map, nodes);
-  const groups = buildCanvasGroups(positions, labels);
   const minY = Math.min(...[...positions.values()].map((position) => position.y));
 
   const canvas: JsonCanvasFile = {
     nodes: [
-      ...groups,
       {
         id: "overview",
         type: "text",
         text: [
-          `# ${map.title}`,
+          `# ${canvasPlainText(truncateForExport(map.title, 64))}`,
           "",
-          `> [!summary] ${labels.overview}`,
-          `> ${nodeSummaryLine(root, labels)}`,
-          "",
-          `- ${labels.rootQuestion}: ${root.title}`,
-          `- ${labels.nodeCount}: ${nodes.length}`,
-          `- ${labels.edgeCount}: ${map.edges.length}`,
-          `- ${labels.graphHome}: ${markdownLink("index.md", joinExportPath(options.exportFolder, "index.md"))}`,
+          `${labels.overview} · ${labels.nodeCount} ${nodes.length} · ${labels.edgeCount} ${map.edges.length}`,
           "",
           labels.fullConversationHint,
+          "",
+          markdownLink(labels.graphHome, joinExportPath(options.exportFolder, "index.md")),
         ].join("\n"),
-        x: -CANVAS_OVERVIEW_WIDTH - 120,
-        y: minY - CANVAS_GROUP_PADDING,
+        x: 0,
+        y: minY - CANVAS_OVERVIEW_HEIGHT - 100,
         width: CANVAS_OVERVIEW_WIDTH,
         height: CANVAS_OVERVIEW_HEIGHT,
-        color: "6",
       },
       ...nodes.map((node) => {
         const position = positions.get(node.id) ?? { x: node.position.x, y: node.position.y, depth: depthOf(map, node) };
@@ -749,9 +753,8 @@ export function exportCanvas(map: ChatMap, options: ExportCanvasOptions = {}): s
 
         return {
           id: node.id,
-          type: "file" as const,
-          file: canvasNodeFilePath(fileName, options),
-          subpath: `#${labels.canvasCard}`,
+          type: "text" as const,
+          text: canvasCardText(node, labels, canvasNodeFilePath(fileName, options)),
           x: position.x,
           y: position.y,
           width: CANVAS_NODE_WIDTH,
@@ -760,7 +763,7 @@ export function exportCanvas(map: ChatMap, options: ExportCanvasOptions = {}): s
         };
       }),
     ],
-    edges: map.edges.map((edge) => ({
+    edges: map.edges.filter((edge) => positions.has(edge.from) && positions.has(edge.to)).map((edge) => ({
       id: edge.id,
       fromNode: edge.from,
       toNode: edge.to,
@@ -768,7 +771,6 @@ export function exportCanvas(map: ChatMap, options: ExportCanvasOptions = {}): s
       toSide: "left",
       toEnd: "arrow",
       color: nodeCanvasColor(map.nodes[edge.to] ?? root, edge.to === map.rootNodeId),
-      label: edgeLabel(map.nodes[edge.to] ?? root),
     })),
   };
 
@@ -814,6 +816,9 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
     `- ${labels.canvasView}: ${markdownLink("map.canvas", "map.canvas")}`,
     `- ${labels.researchBrief}: ${markdownLink("brief.md", "brief.md")}`,
+    `- ${labels.graphImage}: ${markdownLink("map.svg", "map.svg")}`,
+    "",
+    "![](map.svg)",
     "",
     "## " + labels.readingRoute,
     "",
@@ -826,6 +831,7 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     `- \`brief.md\`: ${labels.researchBrief}`,
     `- \`nodes/\`: ${labels.nodesFolder}`,
     `- \`map.canvas\`: ${labels.canvasView}`,
+    `- \`map.svg\`: ${labels.graphImage}`,
     "",
     "## " + labels.usageAdvice,
     "",
@@ -833,6 +839,22 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     "",
   ];
   const indexContent = indexLines.join("\n");
+  const positions = buildCanvasLayout(map, nodes);
+  const graphImage = renderGraphSvg(
+    map.title,
+    `${labels.nodeCount} ${nodes.length} · ${labels.edgeCount} ${map.edges.length} · ${labels.fullConversationHint}`,
+    labels.openFullNote,
+    nodes.map((node) => ({
+      ...graphCardContent(node, labels),
+      id: node.id,
+      x: positions.get(node.id)?.x ?? 0,
+      y: positions.get(node.id)?.y ?? 0,
+      root: node.id === map.rootNodeId,
+      color: nodeCanvasColor(node, node.id === map.rootNodeId),
+      notePath: `nodes/${nodeFileNames.get(node.id) ?? nodeFileName(0, node)}`,
+    })),
+    map.edges,
+  );
 
   return [
     {
@@ -850,6 +872,10 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     {
       path: "map.canvas",
       content: exportCanvas(map, options),
+    },
+    {
+      path: "map.svg",
+      content: graphImage,
     },
   ];
 }

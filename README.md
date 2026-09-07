@@ -60,11 +60,15 @@ Spider Maps/
   ├── index.md                  # Obsidian entry-point note
   ├── brief.md                  # Findings, open questions, and progress
   ├── nodes/                    # One Markdown file per node
-  └── map.canvas                # Visual knowledge map
+  ├── map.canvas                # Editable knowledge map
+  └── map.svg                   # Sharp, shareable knowledge map image
 ```
 
 - Canvas nodes are color-coded by state (purple = root / green = understood / gray = archived / blue = open)
-- Edges carry labels (anchor text or first-question excerpt) with clear arrow directions
+- Canvas cards show concept titles, short previews, and links to full notes, with generous spacing
+- Follow arrows to explore branches; source anchors stay in the notes instead of overlapping the graph
+- SVG keeps card titles and previews visible at any zoom, with the same spacious layout
+- Repeated exports create numbered snapshot folders, preserving earlier exports and handwritten additions
 - Markdown files cross-link parent / child / index — backlinks wire up the full thinking chain
 
 ### 🔌 Works with Any OpenAI-Compatible API
@@ -161,7 +165,7 @@ npm run link       # symlink build output into your vault
 src/
   ai/          OpenAI-compatible API provider (streaming + sync + summarize)
   domain/      ChatMap immutable factories + tree ops + guards + Dagre layout
-  export/      Markdown / Mermaid / Canvas / JSON exporters
+  export/      Markdown / Mermaid / Canvas / SVG / JSON exporters
   state/       Multi-view session store + per-session ViewState
   storage/     Vault JSON persistence (backward-compatible with old directory)
   ui/          React components (graph, chat panel, gallery, modals)

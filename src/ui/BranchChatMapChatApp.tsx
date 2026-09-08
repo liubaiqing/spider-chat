@@ -10,6 +10,8 @@ import { getOnboardingGuideVariant } from "./onboarding";
 import { getSelectionInside, shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 import { openPluginSettings } from "./openPluginSettings";
 import { getMissingAiConfiguration } from "../settingsDefaults";
+import type { BranchSource } from "../types";
+import { getMessageSelection } from "./messageSelection";
 
 interface BranchChatMapChatAppProps {
   plugin: BranchChatMapPlugin;
@@ -50,9 +52,10 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
   }, []);
 
   const createChild = useCallback(
-    (anchorText?: string) => {
-      const selectedText = anchorText?.trim() || getSelectionInside(rootRef.current);
-      viewState?.createChild(selectedText);
+    (anchorText?: string, source?: BranchSource) => {
+      const selection = getMessageSelection(rootRef.current);
+      const selectedText = anchorText?.trim() || selection?.text || getSelectionInside(rootRef.current);
+      viewState?.createChild(selectedText, source ?? (selectedText === selection?.text ? selection?.source : undefined));
       if (selectedText) {
         new Notice(t(language, "onboardingChildCreatedNotice"));
       }
@@ -105,7 +108,7 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
       if (shouldCreateBranchFromTab(event, settings.useTabToCreateChildNodes, Boolean(selectedText))) {
         event.preventDefault();
         event.stopPropagation();
-        createChild(selectedText);
+        createChild();
         rootRef.current?.ownerDocument.getSelection()?.removeAllRanges();
         return;
       }
@@ -226,6 +229,7 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
     <div className="bcm-sidebar-root" ref={rootRef}>
       <NodeDetails
         app={plugin.app}
+        mapId={map?.id ?? ""}
         mapTitle={map ? map.title : ""}
         node={node}
         parent={parent}
@@ -236,11 +240,12 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         focusToken={focusToken}
         isPending={pendingNodeId === node.id}
         canUseAi={!getMissingAiConfiguration(settings)}
+        tabBranchEnabled={settings.useTabToCreateChildNodes}
         language={language}
         onboardingVariant={onboardingVariant}
         streamingMessage={streamingMessages[node.id]}
         onCancel={() => vs?.cancelGeneration()}
-        onCreateChild={() => createChild()}
+        onCreateChild={createChild}
         onDeleteNode={(nodeId) => { void confirmAndDeleteNode(nodeId); }}
         onDismissOnboarding={dismissOnboarding}
         onDraftChange={(value) => vs?.updateDraft(node.id, value)}

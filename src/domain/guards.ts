@@ -16,6 +16,12 @@ function isPosition(value: unknown): value is { x: number; y: number } {
   return isRecord(value) && typeof value.x === "number" && typeof value.y === "number";
 }
 
+export function isSourceTextRange(value: unknown): value is { start: number; end: number } {
+  return isRecord(value)
+    && typeof value.start === "number" && Number.isSafeInteger(value.start) && value.start >= 0
+    && typeof value.end === "number" && Number.isSafeInteger(value.end) && value.end > value.start;
+}
+
 export function isChatMessage(value: unknown): value is ChatMessage {
   if (!isRecord(value)) {
     return false;
@@ -40,6 +46,7 @@ export function isChatNode(value: unknown): value is ChatNode {
     isString(value.title) &&
     (value.anchorText === undefined || isString(value.anchorText)) &&
     (value.sourceMessageId === undefined || isString(value.sourceMessageId)) &&
+    (value.sourceTextRange === undefined || isSourceTextRange(value.sourceTextRange)) &&
     Array.isArray(value.messages) &&
     value.messages.every(isChatMessage) &&
     (value.summary === undefined || isString(value.summary)) &&

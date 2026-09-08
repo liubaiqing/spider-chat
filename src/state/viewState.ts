@@ -3,11 +3,12 @@ import type BranchChatMapPlugin from "../main";
 import { OpenAICompatibleProvider } from "../ai/openAICompatibleProvider";
 import { createRootMap, addChildNode, appendMessage, createMessage, getAncestorPath, updateMapTitle, updateNode } from "../domain/chatMap";
 import { applyDagreLayout } from "../domain/layout";
+import { isSourceTextRange } from "../domain/guards";
 import { buildExportFiles } from "../export/exporters";
 import { t } from "../i18n";
 import { getMissingAiConfiguration } from "../settingsDefaults";
 import { MapRepository } from "../storage/mapRepository";
-import type { ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
+import type { BranchSource, ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { cleanText, slugifyFileName, truncateText } from "../utils/text";
 
 export interface BranchChatMapState {
@@ -111,17 +112,23 @@ export class ViewState {
     this.setState({ activeNodeId: nodeId });
   }
 
-  createChild(anchorText?: string): void {
+  createChild(anchorText?: string, source?: BranchSource): void {
     const { map, activeNodeId } = this.state;
     if (!map || !activeNodeId) {
       return;
     }
 
     const selectedText = anchorText?.trim();
+    const streamingMessage = this.state.pendingNodeId === activeNodeId ? this.state.streamingMessages[activeNodeId] : undefined;
+    const validSource = isSourceTextRange(source) && (
+      map.nodes[activeNodeId]?.messages.some((message) => message.id === source.messageId && message.role === "assistant")
+      || (streamingMessage?.id === source.messageId && streamingMessage.role === "assistant")
+    ) ? source : undefined;
     const language = this.plugin.settings.language;
     const { map: nextMap, child } = addChildNode(map, activeNodeId, {
       anchorText: selectedText || undefined,
       title: selectedText ? undefined : t(language, "untitledQuestionTitle"),
+      source: validSource,
     });
 
     this.commitMap(nextMap);

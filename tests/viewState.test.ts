@@ -64,7 +64,8 @@ describe("ViewState", () => {
       vs.updateDraft(map.rootNodeId, "Explain branching");
       const sending = vs.sendMessage();
       await firstChunk;
-      vs.createChild("部分回答");
+      const sourceMessageId = vs.getSnapshot().streamingMessages[map.rootNodeId]!.id;
+      vs.createChild("部分回答", { messageId: sourceMessageId, start: 0, end: 4 });
       const childId = vs.getSnapshot().activeNodeId!;
       vs.updateNodeNote(map.rootNodeId, "流式期间的理解");
       vs.markUnderstood();
@@ -79,6 +80,9 @@ describe("ViewState", () => {
       expect(snapshot.map?.nodes[map.rootNodeId]?.note).toBe("等待标题期间的新理解");
       expect(snapshot.map?.nodes[map.rootNodeId]?.children).toContain(childId);
       expect(snapshot.map?.nodes[childId]?.status).toBe("understood");
+      expect(snapshot.map?.nodes[childId]?.sourceMessageId).toBe(sourceMessageId);
+      expect(snapshot.map?.nodes[childId]?.sourceTextRange).toEqual({ start: 0, end: 4 });
+      expect(snapshot.map?.nodes[map.rootNodeId]?.messages.at(-1)?.id).toBe(sourceMessageId);
       expect(snapshot.map?.edges.some((edge) => edge.from === map.rootNodeId && edge.to === childId)).toBe(true);
       expect(snapshot.map?.title).toBe("分支探索");
       expect(snapshot.activeNodeId).toBe(childId);
@@ -225,7 +229,35 @@ describe("ViewState", () => {
     const snapshot = vs.getSnapshot();
     const child = snapshot.activeNodeId ? snapshot.map?.nodes[snapshot.activeNodeId] : undefined;
     expect(child?.anchorText).toBe(anchor);
+    expect(child?.sourceMessageId).toBeUndefined();
+    expect(child?.sourceTextRange).toBeUndefined();
     expect(snapshot.activeNodeId ? snapshot.drafts[snapshot.activeNodeId]?.length : 0).toBeLessThan(anchor.length);
+  });
+
+  it("records valid assistant sources only from the current parent", () => {
+    const rootMap = createRootMap("Selection sources");
+    const assistant = createMessage("assistant", "🧠 **注意力**与注意力");
+    const user = createMessage("user", "什么是注意力？");
+    const foreignAssistant = createMessage("assistant", "另一个节点的注意力");
+    const withMessages = appendMessage(appendMessage(rootMap, rootMap.rootNodeId, user), rootMap.rootNodeId, assistant);
+    const other = addChildNode(withMessages, rootMap.rootNodeId);
+    const map = appendMessage(other.map, other.child.id, foreignAssistant);
+
+    for (const [source, accepted] of [
+      [{ messageId: assistant.id, start: 7, end: 10 }, true],
+      [{ messageId: user.id, start: 0, end: 3 }, false],
+      [{ messageId: foreignAssistant.id, start: 0, end: 3 }, false],
+      [{ messageId: "missing", start: 0, end: 3 }, false],
+      [{ messageId: assistant.id, start: 0, end: Infinity }, false],
+      [{ messageId: assistant.id, start: 3, end: 3 }, false],
+    ] as const) {
+      const vs = createViewState(map);
+      vs.createChild("注意力", source);
+      const child = vs.getActiveNode();
+      expect(child?.anchorText).toBe("注意力");
+      expect(child?.sourceMessageId).toBe(accepted ? assistant.id : undefined);
+      expect(child?.sourceTextRange).toEqual(accepted ? { start: 7, end: 10 } : undefined);
+    }
   });
 
   it("counts node subtrees including the selected node", () => {

@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Spider source navigation checks</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  :root { --background-primary:#fff; --background-secondary:#f7f7f7; --text-normal:#222; --text-muted:#666; --text-faint:#888; --interactive-accent:#705dc8; --background-modifier-border:#ddd; }
+  body { font:14px system-ui; margin:16px; background:#fafafa; color:#222; }
+  #app { height:680px; width:520px; border:1px solid #bbb; position:fixed; right:16px; top:16px; }
+  #app>.spider-chat-view { height:100%; }
+  #results { white-space:pre-wrap; max-width:calc(100vw - 590px); }
+</style>
+<h1>Source navigation regression</h1>
+<button id="run">Run source navigation checks</button>
+<button id="prepare">Prepare second occurrence for real Tab</button>
+<p id="external">An unrelated Obsidian panel has SelfAttention selected.</p>
+<pre id="results"></pre><div id="app"></div>
+<script type="module" src="/checks.js"></script>
+

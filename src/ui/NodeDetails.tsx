@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { App } from "obsidian";
 import { displayTitle, nodeStatsLabel, roleLabel, t } from "../i18n";
-import type { AppLanguage, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
+import type { AppLanguage, BranchSource, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { OnboardingCard } from "./OnboardingCard";
 import type { OnboardingGuideVariant } from "./onboarding";
+import { useReadingPosition } from "./useReadingPosition";
+import { SelectionBranchHint } from "./SelectionBranchHint";
 
 interface NodeDetailsProps {
   app: App;
+  mapId: string;
   mapTitle: string;
   node: ChatNode;
   parent?: ChatNode;
@@ -18,11 +21,12 @@ interface NodeDetailsProps {
   focusToken: number;
   isPending: boolean;
   canUseAi: boolean;
+  tabBranchEnabled: boolean;
   language: AppLanguage;
   onboardingVariant: OnboardingGuideVariant | null;
   streamingMessage?: ChatMessage;
   onCancel(this: void): void;
-  onCreateChild(this: void): void;
+  onCreateChild(this: void, anchorText?: string, source?: BranchSource): void;
   onDeleteNode(this: void, nodeId: NodeId): void;
   onDismissOnboarding(this: void): void;
   onDraftChange(this: void, value: string): void;
@@ -59,6 +63,7 @@ function ScrollJumpIcon({ direction }: { direction: "up" | "down" }): ReactEleme
 
 export function NodeDetails({
   app,
+  mapId,
   mapTitle,
   node,
   parent,
@@ -69,6 +74,7 @@ export function NodeDetails({
   focusToken,
   isPending,
   canUseAi,
+  tabBranchEnabled,
   language,
   onboardingVariant,
   streamingMessage,
@@ -88,44 +94,13 @@ export function NodeDetails({
   onTitleChange,
 }: NodeDetailsProps): ReactElement {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToBottomRef = useRef(true);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const { scrollRef, onScroll, onRendered: handleMarkdownRendered, scrollToBottom, scrollToTop, showScrollTop, showScrollBottom, highlightName } = useReadingPosition(mapId, node, path);
   const [titleDraft, setTitleDraft] = useState(displayTitle(language, node.title));
   const sourcePath = `spider/${node.id}.md`;
   const pendingMessage = streamingMessage?.content && !node.messages.some((message) => message.id === streamingMessage.id)
     ? streamingMessage
     : undefined;
   const messages = pendingMessage ? [...node.messages, pendingMessage] : node.messages;
-
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-    stickToBottomRef.current = true;
-    setShowScrollBottom(false);
-  }, []);
-
-  const scrollToTop = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: 0, behavior });
-  }, []);
-
-  const updateScrollState = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const toBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = toBottom < 80;
-    setShowScrollTop(el.scrollTop > 60);
-    setShowScrollBottom(toBottom > 40);
-  }, []);
-
-  const handleMarkdownRendered = useCallback(() => {
-    if (stickToBottomRef.current) scrollToBottom("auto");
-    updateScrollState();
-  }, [scrollToBottom, updateScrollState]);
 
   const commitTitle = useCallback(() => {
     const nextTitle = titleDraft.trim();
@@ -141,11 +116,6 @@ export function NodeDetails({
   }, [language, node.id, node.title]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => scrollToBottom("auto"));
-    return () => window.cancelAnimationFrame(frame);
-  }, [node.id, scrollToBottom]);
-
-  useEffect(() => {
     if (node.messages.length === 0) {
       inputRef.current?.focus();
     }
@@ -153,6 +123,7 @@ export function NodeDetails({
 
   return (
     <aside className="bcm-detail">
+      <style>{`::highlight(${highlightName}) { background-color: var(--text-highlight-bg, #ffe28a); color: var(--text-normal, #202124); }`}</style>
       <header className="bcm-context-header">
         <div className="bcm-map-context">
           <span className="bcm-context-label">{t(language, "mapNameLabel")}</span>
@@ -179,7 +150,7 @@ export function NodeDetails({
       </header>
 
       <div className="bcm-message-area">
-        <div className="bcm-scroll-area" ref={scrollRef} onScroll={updateScrollState}>
+        <div className="bcm-scroll-area" ref={scrollRef} onScroll={onScroll}>
           <div className="bcm-node-toolbar">
             <div className="bcm-node-toolbar-main">
               <input
@@ -210,7 +181,7 @@ export function NodeDetails({
           <section className="bcm-context-strip bcm-anchor">
             <span>{t(language, "anchor")}</span>
             <div className="bcm-source-hint">{t(language, "selectedSourceHint")}</div>
-            <MarkdownContent app={app} markdown={node.anchorText} sourcePath={sourcePath} className="bcm-context-markdown" />
+            <MarkdownContent app={app} markdown={node.anchorText} sourcePath={sourcePath} className="bcm-context-markdown" onRendered={handleMarkdownRendered} />
           </section>
         ) : null}
 
@@ -221,7 +192,7 @@ export function NodeDetails({
         {node.summary ? (
           <section className="bcm-context-strip bcm-summary">
             <span>{t(language, "summary")}</span>
-            <MarkdownContent app={app} markdown={node.summary} sourcePath={sourcePath} className="bcm-context-markdown" />
+            <MarkdownContent app={app} markdown={node.summary} sourcePath={sourcePath} className="bcm-context-markdown" onRendered={handleMarkdownRendered} />
           </section>
         ) : null}
 
@@ -232,9 +203,9 @@ export function NodeDetails({
         ) : (
           <>
             {messages.map((message) => (
-              <article className={`bcm-message bcm-message-${message.role}${message === pendingMessage ? " bcm-message-streaming" : ""}`} key={message.id}>
+              <article className={`bcm-message bcm-message-${message.role}${message === pendingMessage ? " bcm-message-streaming" : ""}`} data-spider-message-id={message.id} key={message.id}>
                 <div className="bcm-message-meta">{message === pendingMessage ? t(language, "streaming") : roleLabel(language, message.role)}</div>
-                <div className="bcm-message-content bcm-streaming-content">
+                <div className="bcm-message-content bcm-streaming-content" data-spider-message-body="true">
                   <MarkdownContent app={app} markdown={message.content} sourcePath={sourcePath} className="bcm-message-content markdown-rendered" onRendered={handleMarkdownRendered} />
                   {message === pendingMessage ? <span className="bcm-caret" /> : null}
                 </div>
@@ -250,6 +221,8 @@ export function NodeDetails({
         )}
 
         </div>
+
+        <SelectionBranchHint rootRef={scrollRef} nodeId={node.id} enabled={tabBranchEnabled} language={language} onCreateChild={onCreateChild} />
 
         {showScrollTop ? (
           <button className="bcm-scroll-jump bcm-scroll-top" type="button" onClick={() => scrollToTop()} aria-label={t(language, "scrollTop")}>
@@ -307,7 +280,7 @@ export function NodeDetails({
         />
         <div className="bcm-composer-footer">
           <div className="bcm-detail-actions">
-            <button type="button" onClick={onCreateChild} title="Tab">{t(language, "newChild")}</button>
+            <button type="button" onClick={() => onCreateChild()} title="Tab">{t(language, "newChild")}</button>
             <button type="button" onClick={onGoParent} disabled={!parent} title="Shift + Tab">{t(language, "parent")}</button>
             <button type="button" onClick={() => onDeleteNode(node.id)} disabled={!parent}>{t(language, "deleteNode")}</button>
             <button type="button" onClick={onSummarize} disabled={!canUseAi} title={!canUseAi ? t(language, "missingApiKey") : undefined}>{t(language, "summarize")}</button>

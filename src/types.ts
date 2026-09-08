@@ -13,12 +13,20 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+/** UTF-16 offsets within a rendered message body; end is exclusive. */
+export interface BranchSource {
+  messageId: MessageId;
+  start: number;
+  end: number;
+}
+
 export interface ChatNode {
   id: NodeId;
   parentId?: NodeId;
   title: string;
   anchorText?: string;
   sourceMessageId?: MessageId;
+  sourceTextRange?: { start: number; end: number };
   messages: ChatMessage[];
   summary?: string;
   note?: string;

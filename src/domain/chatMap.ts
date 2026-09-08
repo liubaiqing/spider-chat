@@ -1,5 +1,5 @@
 import { DEFAULT_MAP_TITLE, UNTITLED_NODE_TITLE } from "../constants";
-import type { ChatMap, ChatMessage, ChatNode, NodeId } from "../types";
+import type { BranchSource, ChatMap, ChatMessage, ChatNode, NodeId } from "../types";
 import { createId, nowIso } from "../utils/id";
 import { cleanText, truncateText } from "../utils/text";
 
@@ -30,6 +30,7 @@ export function createNode(input: {
   parentId?: NodeId;
   title?: string;
   anchorText?: string;
+  source?: BranchSource;
   position?: { x: number; y: number };
   messages?: ChatMessage[];
 }): ChatNode {
@@ -41,6 +42,8 @@ export function createNode(input: {
     parentId: input.parentId,
     title: input.title ?? anchorTitle ?? UNTITLED_NODE_TITLE,
     anchorText: input.anchorText ? cleanText(input.anchorText) : undefined,
+    sourceMessageId: input.source?.messageId,
+    sourceTextRange: input.source ? { start: input.source.start, end: input.source.end } : undefined,
     messages: input.messages ?? [],
     status: "open",
     position: input.position ?? { x: 0, y: 0 },
@@ -64,6 +67,7 @@ export function addChildNode(
   parentId: NodeId,
   options: {
     anchorText?: string;
+    source?: BranchSource;
     title?: string;
   } = {},
 ): { map: ChatMap; child: ChatNode } {
@@ -77,6 +81,7 @@ export function addChildNode(
     parentId,
     title: options.title,
     anchorText: options.anchorText,
+    source: options.source,
     position: {
       x: parent.position.x + 360,
       y: parent.position.y + siblingIndex * 180 - Math.max(0, parent.children.length - 1) * 70,

@@ -1,5 +1,6 @@
 import { Component, MarkdownRenderer, type App } from "obsidian";
 import { useEffect, useRef, type ReactElement } from "react";
+import { textRange } from "./messageSelection";
 
 interface MarkdownContentProps {
   app: App;
@@ -18,6 +19,7 @@ export function MarkdownContent({ app, markdown, sourcePath, className, onRender
     if (!root) {
       return undefined;
     }
+    delete root.dataset.spiderMarkdownReady;
 
     let cancelled = false;
     let rendering = false;
@@ -43,8 +45,25 @@ export function MarkdownContent({ app, markdown, sourcePath, className, onRender
           component.unload();
           break;
         }
+        const selection = root.ownerDocument.getSelection();
+        const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : null;
+        const prefix = root.ownerDocument.createRange();
+        let selected: { start: number; end: number; text: string } | undefined;
+        if (range && root.contains(range.commonAncestorContainer)) {
+          prefix.selectNodeContents(root);
+          prefix.setEnd(range.startContainer, range.startOffset);
+          selected = { start: prefix.toString().length, end: prefix.toString().length + range.toString().length, text: range.toString() };
+        }
         displayedComponent?.unload();
         root.replaceChildren(rendered);
+        root.dataset.spiderMarkdownReady = "true";
+        if (selected && selection) {
+          const replacement = textRange(root, selected.start, selected.end);
+          if (replacement?.toString() === selected.text) {
+            selection.removeAllRanges();
+            selection.addRange(replacement);
+          }
+        }
         displayedComponent = component;
         renderingComponent = null;
         request.onRendered?.();
@@ -70,5 +89,5 @@ export function MarkdownContent({ app, markdown, sourcePath, className, onRender
     requestRenderRef.current?.(markdown, onRendered);
   }, [app, markdown, onRendered, sourcePath]);
 
-  return <div className={className} ref={rootRef} />;
+  return <div className={className} ref={rootRef} data-spider-markdown="true" />;
 }

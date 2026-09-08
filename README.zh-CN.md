@@ -43,6 +43,8 @@
 - **父上下文自动带入**：子节点的问题发到 AI 时，自动带上父节点的标题/摘要/锚点
 - **流式响应**：打字机式的实时渲染，Markdown / 代码块同步高亮
 - **选中即分支**：AI 回答里高亮任意文字 → `Tab` → 子节点的"原文锚点"就是这段高亮
+- **就地提示**：选中 AI 正文后显示「Tab 创建分支」，也可以直接点击；取消选择即隐藏
+- **回到原句**：返回父节点或点击路径导航时恢复阅读位置，并短暂高亮分支的来源；普通节点切换也保留本次会话的阅读位置
 - **辅助动作**：重试、总结、AI 自动起标题
 
 ### 🕸️ 交互式知识图谱
@@ -156,6 +158,7 @@ npm install        # 安装依赖
 npm run dev        # watch 模式（esbuild）
 npm run build      # 生产构建（含 tsc --noEmit 类型检查）
 npm test           # 跑 vitest 测试
+npm run test:browser # 打开本地地址，点击 Run source navigation checks 验证真实浏览器交互（模拟 Obsidian API，不读写笔记库）
 npm run link       # 把构建产物 symlink 到 vault
 ```
 

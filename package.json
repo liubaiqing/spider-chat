@@ -17,6 +17,7 @@
     "build": "tsc --noEmit && node scripts/build.mjs production",
     "link": "node scripts/link.mjs",
     "test": "vitest run",
+    "test:browser": "node scripts/check-browser.mjs",
     "test:watch": "vitest"
   },
   "keywords": [

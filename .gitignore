@@ -20,6 +20,8 @@ data.json
 
 # reports and caches
 artifacts/
+.playwright-cli/
+output/playwright/
 coverage/
 *.tsbuildinfo
 .vite/

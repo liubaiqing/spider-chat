@@ -43,6 +43,8 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 - **Optional parent context**: child node requests automatically include parent title / summary / anchor
 - **Streaming responses**: typewriter-style real-time rendering with Markdown & code-block highlighting
 - **Select-to-branch**: highlight any text in an AI response → `Tab` → the child's "anchor" is that exact highlight
+- **Selection hint**: selecting AI answer text shows a clickable “Tab Create branch” hint; clearing the selection hides it
+- **Return to source**: parent and breadcrumb navigation restore your reading position and briefly highlight the source passage; other node switches retain their position for this session
 - **Auxiliary actions**: retry, summarize, AI auto-title
 
 ### 🕸️ Interactive Knowledge Graph
@@ -156,6 +158,7 @@ npm install        # install dependencies
 npm run dev        # watch mode (esbuild)
 npm run build      # production build (runs tsc --noEmit first)
 npm test           # run vitest tests
+npm run test:browser # open the local URL and click Run source navigation checks (mock Obsidian API, no vault access)
 npm run link       # symlink build output into your vault
 ```
 

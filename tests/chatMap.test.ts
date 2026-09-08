@@ -6,6 +6,7 @@ describe("chat map domain", () => {
     const rootMap = createRootMap("Transformer map");
     const first = addChildNode(rootMap, rootMap.rootNodeId, {
       anchorText: "Self-Attention",
+      source: { messageId: "assistant-message", start: 8, end: 22 },
     });
     const second = addChildNode(first.map, first.child.id, {
       anchorText: "Query Key Value",
@@ -13,7 +14,11 @@ describe("chat map domain", () => {
 
     expect(first.child.parentId).toBe(rootMap.rootNodeId);
     expect(first.child.anchorText).toBe("Self-Attention");
+    expect(first.child.sourceMessageId).toBe("assistant-message");
+    expect(first.child.sourceTextRange).toEqual({ start: 8, end: 22 });
     expect(second.child.parentId).toBe(first.child.id);
+    expect(second.child.sourceMessageId).toBeUndefined();
+    expect(second.child.sourceTextRange).toBeUndefined();
     expect(second.map.nodes[rootMap.rootNodeId]?.children).toEqual([first.child.id]);
     expect(second.map.nodes[first.child.id]?.children).toEqual([second.child.id]);
   });

@@ -4,7 +4,7 @@
 [![GitHub downloads](https://img.shields.io/github/downloads/111pointer111/spider/total?style=flat-square)](https://github.com/111pointer111/spider/releases)
 [![License](https://img.shields.io/github/license/111pointer111/spider?style=flat-square)](LICENSE)
 [![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-blueviolet?style=flat-square)](https://obsidian.md)
-[![Status](https://img.shields.io/badge/status-awaiting%20review-orange?style=flat-square)](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
+[![Obsidian Community](https://img.shields.io/badge/Obsidian-Community-blueviolet?style=flat-square)](https://community.obsidian.md/plugins/spider)
 
 > 🌏 **Other languages**: [中文文档](README.zh-CN.md)
 
@@ -29,7 +29,7 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 
 ## ⚡ 30-Second Quick Start
 
-1. **Install**: While Community Store review is pending, install the release files manually using the steps below
+1. **Install**: Settings → Community plugins → Browse → search `Spider` → Install → Enable
 2. **Configure your API key**: Settings → Spider → fill in `apiBaseUrl` + `apiKey` + `model` (any OpenAI-compatible endpoint)
 3. **Create your first map**: Click the Spider ribbon icon (or run command `Spider: New Spider map`) → start chatting
 4. **Try Tab-branching**: Select any text in an AI response, press `Tab` — that's it
@@ -128,13 +128,15 @@ Spider follows Obsidian's language on first install. You can switch between Chin
 
 ## 📥 Installation
 
-### From GitHub Release (while Community Store review is pending)
+### From Community Plugins (recommended)
+
+Open **Settings → Community plugins → Browse**, search for `Spider`, then select **Install → Enable**. Configure your API key and model under **Settings → Spider**.
+
+### From GitHub Release (manual installation)
 1. Download `main.js`, `manifest.json`, and `styles.css` from the latest [release](https://github.com/111pointer111/spider/releases/latest)
 2. Create `<vault>/.obsidian/plugins/spider/`
 3. Copy the three files into that directory
 4. Restart Obsidian, enable Spider under **Settings → Community plugins**, then configure your API key and model
-
-After Spider is listed in the Community Store, installation will be available directly from **Settings → Community plugins → Browse**.
 
 ### From Source (development)
 ```bash

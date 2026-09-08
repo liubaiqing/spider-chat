@@ -4,7 +4,7 @@
 [![GitHub downloads](https://img.shields.io/github/downloads/111pointer111/spider/total?style=flat-square)](https://github.com/111pointer111/spider/releases)
 [![License](https://img.shields.io/github/license/111pointer111/spider?style=flat-square)](LICENSE)
 [![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-blueviolet?style=flat-square)](https://obsidian.md)
-[![Status](https://img.shields.io/badge/status-awaiting%20review-orange?style=flat-square)](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
+[![Obsidian Community](https://img.shields.io/badge/Obsidian-Community-blueviolet?style=flat-square)](https://community.obsidian.md/plugins/spider)
 
 > 🌏 **其他语言**: [English](README.md)
 
@@ -29,7 +29,7 @@
 
 ## ⚡ 30 秒上手
 
-1. **安装**：社区商店审核期间，请按照下方步骤从 GitHub Release 手动安装
+1. **安装**：设置 → 第三方插件 → 浏览 → 搜索 `Spider` → 安装 → 启用
 2. **配置 API Key**：Settings → Spider → 填 `apiBaseUrl` + `apiKey` + `model`（任何 OpenAI 兼容端点都行）
 3. **新建一张图**：点击 Spider ribbon 图标（或运行命令 `Spider: 新建 Spider 图谱`）→ 开始聊天
 4. **试试 Tab 分支**：AI 回答里选中一段文字，按 `Tab` —— 就这么简单
@@ -128,13 +128,15 @@ Spider Maps/
 
 ## 📥 安装
 
-### 从 GitHub Release 安装（社区商店审核期间）
+### 从社区插件市场安装（推荐）
+
+打开 **设置 → 第三方插件 → 浏览**，搜索 `Spider`，点击 **安装 → 启用**，然后在 **设置 → Spider** 中配置 API key 和 model。
+
+### 从 GitHub Release 手动安装
 1. 从最新 [Release](https://github.com/111pointer111/spider/releases/latest) 下载 `main.js`、`manifest.json` 和 `styles.css`
 2. 创建 `<vault>/.obsidian/plugins/spider/`
 3. 把三个文件复制到该目录
 4. 重启 Obsidian，在 **Settings → Community plugins** 中启用 Spider，然后配置 API key 和 model
-
-社区商店上架后，可以直接在 **Settings → Community plugins → Browse** 中安装。
 
 ### 从源码安装（开发）
 ```bash

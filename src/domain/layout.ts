@@ -5,6 +5,79 @@ import { markdownToPlainText } from "../utils/text";
 const NODE_WIDTH = 300;
 const NODE_HEIGHT = 196;
 
+/** A sub-pixel difference is not worth a write, and a huge one means bad data. */
+const MIN_ALIGN_SHIFT = 0.5;
+const MAX_ALIGN_SHIFT = 120;
+
+export interface RowAlignmentBox {
+  id: string;
+  parentId?: string;
+  position: { x: number; y: number };
+  /** Real rendered height, which the layout can only estimate. */
+  height: number;
+}
+
+export interface RowAlignment {
+  nodeId: string;
+  position: { x: number; y: number };
+  delta: number;
+}
+
+/**
+ * The layout aligns node centres using *estimated* card heights, so a link between a
+ * parent and its only child can end up a few pixels out and render as a step.
+ * Given the measured heights, put each only child back on its parent's centre line.
+ *
+ * Corrections are applied top-down so a chain of only children straightens link by
+ * link, and the result is idempotent: once a pair is level its delta is zero.
+ */
+export function alignSingleChildRows(
+  boxes: readonly RowAlignmentBox[],
+  maxShift = MAX_ALIGN_SHIFT,
+): RowAlignment[] {
+  const working = new Map(boxes.map((box) => [box.id, { ...box, position: { ...box.position } }]));
+  const children = new Map<string, string[]>();
+  const roots: string[] = [];
+
+  for (const box of boxes) {
+    if (box.parentId && working.has(box.parentId)) {
+      children.set(box.parentId, [...(children.get(box.parentId) ?? []), box.id]);
+    } else {
+      roots.push(box.id);
+    }
+  }
+
+  const updates: RowAlignment[] = [];
+  const queue = [...roots];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    const parent = working.get(id);
+    if (!parent) continue;
+    const kids = children.get(id) ?? [];
+    queue.push(...kids);
+
+    // Only children are meant to sit level with the parent; siblings must spread.
+    if (kids.length !== 1) continue;
+    const only = working.get(kids[0]!);
+    if (!only) continue;
+
+    const delta = (parent.position.y + parent.height / 2) - (only.position.y + only.height / 2);
+    if (Math.abs(delta) < MIN_ALIGN_SHIFT || Math.abs(delta) > maxShift) continue;
+
+    // Rounded to two decimals: keeps JSON tidy while staying idempotent.
+    const y = Math.round((only.position.y + delta) * 100) / 100;
+    only.position = { x: only.position.x, y };
+    updates.push({ nodeId: only.id, position: only.position, delta });
+  }
+
+  return updates;
+}
+
 function estimatedLines(text: string, width: number): number {
   return text.split(/\r?\n/).reduce((total, line) => {
     const units = [...line].reduce((count, character) => count + (/^[\x00-\x7f]$/.test(character) ? 0.55 : 1), 0);

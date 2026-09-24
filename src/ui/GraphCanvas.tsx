@@ -16,6 +16,7 @@ import {
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, ModelProfile, NodeId } from "../types";
+import { alignSingleChildRows } from "../domain/layout";
 import { NO_GUIDES, snapToGuides, type SnapBox } from "../domain/snap";
 import { markdownToPlainText, truncateText } from "../utils/text";
 import { NodeNotePopover } from "./NodeNotePopover";
@@ -157,6 +158,9 @@ const FALLBACK_HEIGHT = 196;
 interface GraphCanvasProps {
   map: ChatMap;
   snapEnabled: boolean;
+  /** Changes on every auto-layout; triggers one exact levelling pass. */
+  layoutToken: number;
+  onAlignPositions(this: void, updates: ReadonlyArray<{ nodeId: NodeId; position: { x: number; y: number } }>): void;
   replayPanelId: string;
   replayPanelOpen: boolean;
   activeNodeId: NodeId;
@@ -239,6 +243,8 @@ function collectActivePathIds(map: ChatMap, activeNodeId: NodeId): Set<NodeId> {
 function GraphCanvasInner({
   map,
   snapEnabled,
+  layoutToken,
+  onAlignPositions,
   replayPanelId,
   replayPanelOpen,
   activeNodeId,
@@ -423,6 +429,31 @@ function GraphCanvasInner({
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  // Heights only depend on card content, so they stay valid across a re-layout.
+  const measuredHeights = useRef(new Map<NodeId, number>());
+  useEffect(() => {
+    for (const node of nodes) {
+      const height = node.measured?.height;
+      if (height) measuredHeights.current.set(node.id, height);
+    }
+  }, [nodes]);
+
+  const alignedToken = useRef(0);
+  useEffect(() => {
+    if (layoutToken === alignedToken.current) return;
+    alignedToken.current = layoutToken;
+    if (layoutToken === 0) return;
+
+    const boxes = computedNodes.flatMap((node) => {
+      const height = measuredHeights.current.get(node.id);
+      return height ? [{ id: node.id, parentId: node.data.node.parentId, position: node.position, height }] : [];
+    });
+    const updates = alignSingleChildRows(boxes);
+    if (updates.length > 0) {
+      onAlignPositions(updates.map((update) => ({ nodeId: update.nodeId, position: update.position })));
+    }
+  }, [computedNodes, layoutToken, onAlignPositions]);
 
   // Cards joined by an edge pull each other's centres together, so dragging either
   // end of a stepped link straightens it.

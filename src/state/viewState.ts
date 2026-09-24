@@ -26,6 +26,8 @@ export interface BranchChatMapState {
   error: string | null;
   errorDetails: string | null;
   hasManualPositions: boolean;
+  /** Bumped by auto-layout so the canvas can level single-child links once measured. */
+  layoutToken: number;
 }
 
 export interface NodeSendOptions {
@@ -48,6 +50,7 @@ const INITIAL_STATE: BranchChatMapState = {
   error: null,
   errorDetails: null,
   hasManualPositions: false,
+  layoutToken: 0,
 };
 
 export interface NodeSearchResult {
@@ -571,8 +574,29 @@ export class ViewState {
     const { map } = this.state;
     if (map) {
       this.commitMap((currentMap) => applyDagreLayout(currentMap));
-      this.setState({ hasManualPositions: false });
+      this.setState({ hasManualPositions: false, layoutToken: this.state.layoutToken + 1 });
     }
+  }
+
+  /**
+   * Apply a batch of position fixes in one commit. Used by the canvas to level
+   * single-child links once the real card heights are known.
+   */
+  applyNodePositions(updates: ReadonlyArray<{ nodeId: NodeId; position: { x: number; y: number } }>): void {
+    if (updates.length === 0) {
+      return;
+    }
+
+    const byId = new Map(updates.map((update) => [update.nodeId, update.position]));
+    this.commitMap((currentMap) => {
+      let nextMap = currentMap;
+      for (const [nodeId, position] of byId) {
+        if (nextMap.nodes[nodeId]) {
+          nextMap = updateNode(nextMap, nodeId, { position });
+        }
+      }
+      return nextMap;
+    });
   }
 
   countNodeSubtree(nodeId: NodeId): number {
@@ -733,6 +757,7 @@ export class ViewState {
       error: null,
       errorDetails: null,
       hasManualPositions: resetUi ? false : this.state.hasManualPositions,
+      layoutToken: resetUi ? 0 : this.state.layoutToken,
     };
     this.syncDocument();
   }

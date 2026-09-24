@@ -43,7 +43,7 @@ function openMapSwitcher(plugin: BranchChatMapPlugin): void {
 export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle, onNewSpider, onLoadMap }: BranchChatMapAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = useBranchChatMapState(viewState);
-  const { map, activeNodeId, collapsedIds, hasManualPositions, generationJobs } = state;
+  const { map, activeNodeId, collapsedIds, hasManualPositions, generationJobs, layoutToken } = state;
   const [searchQuery, setSearchQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [replayPanelOpen, setReplayPanelOpen] = useState(false);
@@ -410,6 +410,8 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
         <GraphCanvas
           map={map}
           snapEnabled={settings.snapToGuides}
+          layoutToken={layoutToken}
+          onAlignPositions={(updates) => viewState.applyNodePositions(updates)}
           replayPanelId={replayPanelId}
           replayPanelOpen={replayPanelOpen}
           activeNodeId={activeNode.id}

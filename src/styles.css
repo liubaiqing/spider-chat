@@ -189,6 +189,11 @@
   background: var(--bcm-panel-raised);
 }
 
+.bcm-more-item:focus-visible {
+  outline: 2px solid var(--bcm-accent);
+  outline-offset: -2px;
+}
+
 .bcm-more-item.is-danger {
   color: var(--bcm-danger);
 }
@@ -495,6 +500,39 @@
   padding: 8px;
 }
 
+.bcm-search-filter {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--bcm-border-subtle);
+  border-radius: 7px;
+  background: var(--bcm-panel);
+  color: var(--bcm-muted);
+  font-size: 12px;
+}
+
+.bcm-search-filter span {
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--bcm-border-strong);
+  border-radius: 3px;
+  line-height: 11px;
+  text-align: center;
+}
+
+.bcm-search-filter.is-on {
+  color: var(--bcm-accent-strong);
+  border-color: var(--bcm-accent);
+}
+
+.bcm-search-filter:focus-visible {
+  outline: 2px solid var(--bcm-accent);
+  outline-offset: 2px;
+}
+
 .bcm-search-results > .bcm-search-result {
   appearance: none;
   box-sizing: border-box;
@@ -719,6 +757,12 @@
   border-style: dashed;
   border-color: color-mix(in srgb, var(--bcm-accent) 70%, var(--bcm-border));
   box-shadow: 0 0 0 2px var(--bcm-accent-soft);
+}
+
+.bcm-graph-node.is-search-target,
+.react-flow__node:focus-visible .bcm-graph-node {
+  border-color: var(--bcm-accent);
+  box-shadow: 0 0 0 4px var(--bcm-accent-soft), 0 0 0 1px var(--bcm-accent);
 }
 
 .bcm-node-meta {
@@ -1192,6 +1236,36 @@
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+.bcm-anchor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.bcm-anchor-heading > span {
+  color: var(--bcm-faint);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.bcm-source-return {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--bcm-border-subtle);
+  border-radius: 7px;
+  background: var(--bcm-panel);
+  color: var(--bcm-accent-strong);
+  font-size: 11px;
+}
+
+.bcm-source-return:focus-visible {
+  outline: 2px solid var(--bcm-accent);
+  outline-offset: 2px;
 }
 
 .bcm-source-hint {
@@ -2177,6 +2251,13 @@
   .bcm-provider-setup button,
   .map-switcher-delete {
     min-width: 44px;
+    min-height: 44px;
+  }
+
+  .bcm-search-filter,
+  .bcm-source-return,
+  .bcm-more-item,
+  .bcm-search-results > .bcm-search-result {
     min-height: 44px;
   }
 }

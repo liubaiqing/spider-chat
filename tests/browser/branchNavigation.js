@@ -132,6 +132,27 @@ document.querySelector("#run").addEventListener("click", async () => {
   }
 });
 
+document.querySelector("#run-return").addEventListener("click", async () => {
+  report.textContent = "";
+  try {
+    await switchNode(rootMap.rootNodeId);
+    const selected = selectSecondOccurrence();
+    const exactText = selected.toString();
+    await pressTab();
+    const child = vs.getActiveNode();
+    const returnButton = view.contentEl.querySelector(".bcm-source-return");
+    assert(Boolean(returnButton), "source return action appears on anchored branch");
+    returnButton.click();
+    await delay(180);
+    const range = findSourceRange(scroller(), child);
+    assert(vs.getActiveNode()?.id === rootMap.rootNodeId, "source action returns to parent node");
+    assert(range?.toString() === exactText, "source action locates the exact selected occurrence");
+    report.textContent += "ALL SOURCE RETURN CHECKS PASSED\n";
+  } catch (error) {
+    report.textContent += "FAIL " + error + "\n";
+  }
+});
+
 window.runSourceNavigationChecks = async () => {
   const c = window.spiderChecks;
   const { vs, rootId, siblingId, delay, assert } = c;

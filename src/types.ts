@@ -115,6 +115,8 @@ export interface BranchChatMapSettings {
   streamResponses: boolean;
   onboardingCardDismissed: boolean;
   lastOpenedMapId?: string;
+  /** Local reading progress for each map; never written into an exported map. */
+  lastReadLocations?: Record<ChatMapId, { nodeId: NodeId; scrollTop: number }>;
   models?: ModelProfile[];
   defaultModelProfileId?: string;
   contextMode?: ContextMode;

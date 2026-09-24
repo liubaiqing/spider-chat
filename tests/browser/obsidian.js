@@ -38,7 +38,48 @@ class Modal {
 }
 class ButtonComponent {
 }
+class Setting {
+  constructor() {}
+  setName() { return this; }
+  setDesc() { return this; }
+  addDropdown() { return this; }
+  addButton() { return this; }
+  addText() { return this; }
+}
 class Notice {
+}
+class Menu {
+  items = [];
+  addItem(configure) {
+    const item = {
+      title: "",
+      disabled: false,
+      action: () => {},
+      setTitle(value) { this.title = value; return this; },
+      setIcon() { return this; },
+      setWarning() { return this; },
+      setDisabled(value) { this.disabled = value; return this; },
+      onClick(action) { this.action = action; return this; },
+    };
+    configure(item);
+    this.items.push(item);
+    return this;
+  }
+  addSeparator() { return this; }
+  showAtPosition(position) {
+    document.querySelector("#mock-node-menu")?.remove();
+    const menu = document.createElement("div");
+    menu.id = "mock-node-menu";
+    menu.style.cssText = `position:fixed;left:${position.x}px;top:${position.y}px;z-index:100;background:#fff;border:1px solid #aaa;padding:8px;display:grid;gap:6px`;
+    for (const item of this.items) {
+      const button = document.createElement("button");
+      button.textContent = item.title;
+      button.disabled = item.disabled;
+      button.onclick = item.action;
+      menu.append(button);
+    }
+    document.body.append(menu);
+  }
 }
 class App {
 }
@@ -60,11 +101,13 @@ const MarkdownRenderer = {
 export {
   App,
   ButtonComponent,
+  Setting,
   Component,
   FuzzySuggestModal,
   ItemView,
   MarkdownRenderer,
   Modal,
+  Menu,
   Notice,
   WorkspaceLeaf,
   normalizePath,

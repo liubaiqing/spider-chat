@@ -42,12 +42,19 @@ function openMapSwitcher(plugin: BranchChatMapPlugin): void {
 
 export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle, onNewSpider, onLoadMap }: BranchChatMapAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+  const searchRevealCounter = useRef(0);
   const state = useBranchChatMapState(viewState);
   const { map, activeNodeId, collapsedIds, hasManualPositions, generationJobs, layoutToken } = state;
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpenOnly, setSearchOpenOnly] = useState(false);
+  const [searchReveal, setSearchReveal] = useState<{ nodeId: NodeId; token: number } | undefined>();
+  const [focusCurrentPath, setFocusCurrentPath] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [replayPanelOpen, setReplayPanelOpen] = useState(false);
   const replayPanelId = useId();
+  const searchResultsId = useId();
   const activeNode = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const settings = usePluginSettings(plugin);
   const language = settings.language;
@@ -61,7 +68,24 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   useEffect(() => {
     setReplayPanelOpen(false);
+    setSearchQuery("");
+    setSearchOpen(false);
+    setSearchOpenOnly(false);
+    setSearchReveal(undefined);
+    setFocusCurrentPath(false);
   }, [map?.id]);
+
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const panel = searchPanelRef.current;
+    const doc = panel?.ownerDocument;
+    if (!panel || !doc) return undefined;
+    const onOutside = (event: PointerEvent) => {
+      if (!panel.contains(event.target as Node)) setSearchOpen(false);
+    };
+    doc.addEventListener("pointerdown", onOutside, true);
+    return () => doc.removeEventListener("pointerdown", onOutside, true);
+  }, [searchOpen]);
 
   const handleSwitchClick = useCallback(() => {
     openMapSwitcher(plugin);
@@ -168,8 +192,8 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     menu.showAtPosition(position, rootRef.current?.ownerDocument);
   }, [confirmAndDeleteNode, language, plugin.app, settings, viewState]);
 
-  const searchResults = useMemo(() => viewState.searchNodes(searchQuery), [searchQuery, state.map, viewState]);
-  const searchMatchIds = useMemo(() => new Set(searchResults.map((result) => result.node.id)), [searchResults]);
+  const searchResults = useMemo(() => viewState.searchNodes(searchQuery, searchOpenOnly), [searchQuery, searchOpenOnly, state.map, viewState]);
+  const searchMatchIds = useMemo(() => new Set(searchQuery.trim() ? searchResults.map((result) => result.node.id) : []), [searchQuery, searchResults]);
 
   const createChild = useCallback(
     (anchorText?: string) => {
@@ -192,6 +216,9 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const handleRevealSearchResult = useCallback((nodeId: NodeId) => {
     viewState.revealNode(nodeId);
+    setSearchReveal({ nodeId, token: ++searchRevealCounter.current });
+    setSearchOpen(false);
+    setSearchQuery("");
   }, [viewState]);
 
   const handleKeydown = useCallback(
@@ -340,17 +367,36 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           </div>
           <div className="bcm-topbar-meta">{mapStatsLabel(language, nodeCount, Math.max(path.length - 1, 0))}</div>
         </div>
-        <div className="bcm-search-panel">
+        <div className="bcm-search-panel" ref={searchPanelRef}>
           <input
             className="bcm-search-input"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.currentTarget.value)}
-            placeholder={t(language, "searchPlaceholder")}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                setSearchOpen(false);
+                event.currentTarget.blur();
+              }
+            }}
+            placeholder={searchOpenOnly ? t(language, "searchOpenOnly") : t(language, "searchPlaceholder")}
             aria-label={t(language, "searchNodes")}
+            aria-expanded={searchOpen}
+            aria-controls={searchOpen ? searchResultsId : undefined}
           />
-          {searchQuery ? (
-            <div className="bcm-search-results">
-              {searchResults.length > 0 ? searchResults.slice(0, 8).map((result) => (
+          {searchOpen ? (
+            <div id={searchResultsId} className="bcm-search-results">
+              <button
+                type="button"
+                className={`bcm-search-filter${searchOpenOnly ? " is-on" : ""}`}
+                aria-pressed={searchOpenOnly}
+                onClick={() => setSearchOpenOnly((current) => !current)}
+              >
+                <span aria-hidden="true">{searchOpenOnly ? "✓" : ""}</span>
+                {t(language, "searchOpenOnly")}
+              </button>
+              {(searchQuery.trim() || searchOpenOnly) && (searchResults.length > 0 ? searchResults.map((result) => (
                 <SearchResultItem
                   app={plugin.app}
                   key={result.node.id}
@@ -360,7 +406,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
                 />
               )) : (
                 <div className="bcm-search-empty">{t(language, "searchNoResults")}</div>
-              )}
+              ))}
             </div>
           ) : null}
         </div>
@@ -389,13 +435,21 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
                 <button
                   className={`bcm-more-item${settings.snapToGuides ? " is-on" : ""}`}
                   type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={settings.snapToGuides}
+                  aria-pressed={settings.snapToGuides}
                   title={t(language, "snapToGuidesHint")}
                   onClick={() => { void plugin.updateSettings({ snapToGuides: !settings.snapToGuides }); }}
                 >
                   <span className="bcm-more-check" aria-hidden="true">{settings.snapToGuides ? "✓" : ""}</span>
                   {t(language, "snapToGuides")}
+                </button>
+                <button
+                  className={`bcm-more-item${focusCurrentPath ? " is-on" : ""}`}
+                  type="button"
+                  aria-pressed={focusCurrentPath}
+                  onClick={() => { setFocusCurrentPath((current) => !current); setMoreOpen(false); }}
+                >
+                  <span className="bcm-more-check" aria-hidden="true">{focusCurrentPath ? "✓" : ""}</span>
+                  {t(language, "focusCurrentPath")}
                 </button>
                 <button className="bcm-more-item is-danger" onClick={() => { setMoreOpen(false); void handleDeleteCurrentMap(); }} type="button">
                   {t(language, "deleteMap")}
@@ -418,6 +472,8 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           collapsedIds={collapsedIds}
           language={language}
           searchMatchIds={searchMatchIds}
+          searchReveal={searchReveal}
+          focusCurrentPath={focusCurrentPath}
           modelProfiles={settings.models ?? []}
           generationJobs={generationJobs}
           onActivateNode={(nodeId) => viewState.setActiveNode(nodeId)}

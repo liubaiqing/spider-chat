@@ -74,6 +74,8 @@ interface NodeDetailsProps {
   onProfileChange(this: void, profileId: string): void;
   onStatusChange(this: void, status: ChatNodeStatus): void;
   onTitleChange(this: void, title: string): void;
+  getSavedReadingTop(this: void, mapId: string, nodeId: NodeId): number | undefined;
+  onReadingPositionChange(this: void, mapId: string, nodeId: NodeId, scrollTop: number): void;
 }
 
 function isImeComposing(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
@@ -131,9 +133,11 @@ export function NodeDetails({
   onProfileChange,
   onStatusChange,
   onTitleChange,
+  getSavedReadingTop,
+  onReadingPositionChange,
 }: NodeDetailsProps): ReactElement {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { scrollRef, onScroll, onRendered: handleMarkdownRendered, scrollToBottom, scrollToTop, showScrollTop, showScrollBottom, highlightName } = useReadingPosition(mapId, node, path);
+  const { scrollRef, onScroll, onRendered: handleMarkdownRendered, scrollToBottom, scrollToTop, showScrollTop, showScrollBottom, highlightName } = useReadingPosition(mapId, node, path, getSavedReadingTop, onReadingPositionChange);
   const [titleDraft, setTitleDraft] = useState(displayTitle(language, node.title));
   const [openMenu, setOpenMenu] = useState<"model" | "context" | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -263,8 +267,14 @@ export function NodeDetails({
         <div className="bcm-scroll-area" ref={scrollRef} onScroll={onScroll}>
         {node.anchorText ? (
           <section className="bcm-context-strip bcm-anchor">
-            <span>{t(language, "anchor")}</span>
-            <div className="bcm-source-hint">{t(language, "selectedSourceHint")}</div>
+            <div className="bcm-anchor-heading">
+              <span>{t(language, "anchor")}</span>
+              {node.parentId ? (
+                <button type="button" className="bcm-source-return" onClick={() => onRevealNode(node.parentId!)}>
+                  {t(language, "returnToSource")}
+                </button>
+              ) : null}
+            </div>
             <MarkdownContent app={app} markdown={node.anchorText} sourcePath={sourcePath} className="bcm-context-markdown" onRendered={handleMarkdownRendered} />
           </section>
         ) : null}

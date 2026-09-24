@@ -78,6 +78,9 @@ export class ViewState {
   private loadEpoch = 0;
   private disposed = false;
   private loadedMapId: ChatMapId | null = null;
+  private readonly readingTops = new Map<string, number>();
+  private readingSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingReadingLocation: { mapId: ChatMapId; nodeId: NodeId; scrollTop: number } | null = null;
 
   constructor(plugin: BranchChatMapPlugin, repository: MapRepository, initialMap?: ChatMap, documents?: MapDocumentRegistry) {
     this.plugin = plugin;
@@ -100,6 +103,22 @@ export class ViewState {
 
   getLoadedMapId(): ChatMapId | null {
     return this.loadedMapId;
+  }
+
+  getSavedReadingTop(mapId: ChatMapId, nodeId: NodeId): number | undefined {
+    const key = `${mapId}:${nodeId}`;
+    const current = this.readingTops.get(key);
+    if (current !== undefined) return current;
+    const saved = this.plugin.settings.lastReadLocations?.[mapId];
+    return saved?.nodeId === nodeId ? saved.scrollTop : undefined;
+  }
+
+  rememberReadingPosition(mapId: ChatMapId, nodeId: NodeId, scrollTop: number): void {
+    if (!Number.isFinite(scrollTop) || scrollTop < 0) return;
+    this.readingTops.set(`${mapId}:${nodeId}`, scrollTop);
+    if (this.state.map?.id === mapId && this.state.activeNodeId === nodeId) {
+      this.queueReadingLocation(mapId, nodeId, scrollTop);
+    }
   }
 
   async load(mapId?: ChatMapId): Promise<void> {
@@ -278,6 +297,22 @@ export class ViewState {
     if (!removed) {
       await this.documents.forget(map.id);
       return false;
+    }
+
+    if (this.pendingReadingLocation?.mapId === map.id) {
+      this.pendingReadingLocation = null;
+      if (this.readingSaveTimer) clearTimeout(this.readingSaveTimer);
+      this.readingSaveTimer = null;
+    }
+    for (const key of this.readingTops.keys()) {
+      if (key.startsWith(`${map.id}:`)) this.readingTops.delete(key);
+    }
+    const locations = { ...(this.plugin.settings.lastReadLocations ?? {}) };
+    if (locations[map.id]) {
+      delete locations[map.id];
+      void this.plugin.updateSettings({ lastReadLocations: locations }).catch((error: unknown) => {
+        console.error("Spider: could not clear deleted map reading position", error);
+      });
     }
 
     const remaining = await this.repository.listMaps();
@@ -629,15 +664,16 @@ export class ViewState {
     return count;
   }
 
-  searchNodes(query: string): NodeSearchResult[] {
+  searchNodes(query: string, openOnly = false): NodeSearchResult[] {
     const { map } = this.state;
     const cleanQuery = cleanText(query).toLowerCase();
-    if (!map || !cleanQuery) {
+    if (!map || (!cleanQuery && !openOnly)) {
       return [];
     }
 
     return Object.values(map.nodes)
       .map((node) => {
+        if (openOnly && node.status !== "open") return null;
         const haystack = [
           node.title,
           node.note ?? "",
@@ -646,14 +682,16 @@ export class ViewState {
           ...node.messages.map((message) => message.content),
         ].join(" ");
 
-        if (!haystack.toLowerCase().includes(cleanQuery)) {
+        if (cleanQuery && !haystack.toLowerCase().includes(cleanQuery)) {
           return null;
         }
 
         return {
           node,
           path: getAncestorPath(map, node.id),
-          excerpt: this.searchExcerpt(haystack, cleanQuery),
+          excerpt: cleanQuery
+            ? this.searchExcerpt(haystack, cleanQuery)
+            : truncateText(cleanText(node.summary ?? node.note ?? node.anchorText ?? node.title), 120),
         };
       })
       .filter((result): result is NodeSearchResult => Boolean(result));
@@ -688,6 +726,7 @@ export class ViewState {
 
   dispose(): void {
     if (this.disposed) return;
+    this.flushReadingLocation();
     this.disposed = true;
     this.loadEpoch += 1;
     this.unsubscribeDocument?.();
@@ -747,8 +786,9 @@ export class ViewState {
     this.document = this.documents.get(map);
     this.loadedMapId = this.document.map.id;
     this.unsubscribeDocument = this.document.subscribe(() => this.syncDocument());
+    const savedNodeId = this.plugin.settings.lastReadLocations?.[this.document.map.id]?.nodeId;
     const activeNodeId = resetUi || !this.document.map.nodes[this.state.activeNodeId ?? ""]
-      ? this.document.map.rootNodeId
+      ? (savedNodeId && this.document.map.nodes[savedNodeId] ? savedNodeId : this.document.map.rootNodeId)
       : this.state.activeNodeId;
     this.state = {
       ...this.state,
@@ -1133,6 +1173,8 @@ export class ViewState {
   }
 
   private setState(patch: Partial<BranchChatMapState>): void {
+    const previousMapId = this.state.map?.id;
+    const previousNodeId = this.state.activeNodeId;
     let nextState: BranchChatMapState = {
       ...this.state,
       ...patch,
@@ -1152,7 +1194,35 @@ export class ViewState {
       };
     }
     this.state = nextState;
+    const nextMap = nextState.map;
+    if (nextMap && nextMap.id === previousMapId && nextState.activeNodeId && nextState.activeNodeId !== previousNodeId) {
+      const savedTop = this.getSavedReadingTop(nextMap.id, nextState.activeNodeId) ?? 0;
+      this.queueReadingLocation(nextMap.id, nextState.activeNodeId, savedTop);
+    }
     this.emit();
+  }
+
+  private queueReadingLocation(mapId: ChatMapId, nodeId: NodeId, scrollTop: number): void {
+    if (typeof (this.plugin as unknown as { updateSettings?: unknown }).updateSettings !== "function") return;
+    this.pendingReadingLocation = { mapId, nodeId, scrollTop };
+    if (this.readingSaveTimer) clearTimeout(this.readingSaveTimer);
+    this.readingSaveTimer = setTimeout(() => this.flushReadingLocation(), 650);
+  }
+
+  private flushReadingLocation(): void {
+    if (this.readingSaveTimer) clearTimeout(this.readingSaveTimer);
+    this.readingSaveTimer = null;
+    const location = this.pendingReadingLocation;
+    this.pendingReadingLocation = null;
+    if (!location) return;
+    const updateSettings = (this.plugin as unknown as { updateSettings?: (patch: Partial<BranchChatMapSettings>) => Promise<void> }).updateSettings;
+    if (typeof updateSettings !== "function") return;
+    const saved = this.plugin.settings.lastReadLocations?.[location.mapId];
+    if (saved?.nodeId === location.nodeId && Math.abs(saved.scrollTop - location.scrollTop) < 2) return;
+    const locations = { ...(this.plugin.settings.lastReadLocations ?? {}), [location.mapId]: { nodeId: location.nodeId, scrollTop: location.scrollTop } };
+    void updateSettings.call(this.plugin, { lastReadLocations: locations }).catch((error: unknown) => {
+      console.error("Spider: could not save reading position", error);
+    });
   }
 
   private emit(): void {

@@ -50,6 +50,7 @@ export type TranslationKey =
   | "searchNodes"
   | "searchPlaceholder"
   | "searchNoResults"
+  | "searchOpenOnly"
   | "mapSwitcherPlaceholder"
   | "mapSwitcherEmpty"
   | "galleryEmpty"
@@ -58,6 +59,7 @@ export type TranslationKey =
   | "updatedAt"
   | "rootNode"
   | "anchor"
+  | "returnToSource"
   | "summary"
   | "parent"
   | "summarize"
@@ -127,6 +129,7 @@ export type TranslationKey =
   | "defaultModelOption"
   | "apply"
   | "nodeSettingsHint"
+  | "focusCurrentPath"
   | "editNodeSummary"
   | "summaryPlaceholder"
   | "exportChooseTitle"
@@ -232,6 +235,7 @@ const zh: TranslationDictionary = {
   searchNodes: "搜索节点",
   searchPlaceholder: "搜索标题、笔记、摘要、锚点或消息",
   searchNoResults: "没有找到匹配节点",
+  searchOpenOnly: "只看进行中",
   mapSwitcherPlaceholder: "切换 Spider 图谱...",
   mapSwitcherEmpty: "没有找到图谱。",
   galleryEmpty: "还没有图谱。点击上方按钮创建一个。",
@@ -240,6 +244,7 @@ const zh: TranslationDictionary = {
   updatedAt: "更新于 {time}",
   rootNode: "根节点",
   anchor: "原文锚点",
+  returnToSource: "回到原句",
   summary: "节点总结",
   parent: "返回上级",
   summarize: "总结",
@@ -308,7 +313,8 @@ const zh: TranslationDictionary = {
   sendOptionsForNode: "设置“{title}”的下一次提问。发送后恢复默认设置。",
   defaultModelOption: "默认模型",
   apply: "应用",
-  nodeSettingsHint: "右键节点打开操作菜单",
+  nodeSettingsHint: "右键或长按节点打开操作菜单；键盘可按 Shift + F10",
+  focusCurrentPath: "聚焦当前问题链",
   editNodeSummary: "编辑节点总结",
   summaryPlaceholder: "编辑这段总结，支持 Markdown。",
   exportChooseTitle: "选择导出格式",
@@ -413,6 +419,7 @@ const en: TranslationDictionary = {
   searchNodes: "Search nodes",
   searchPlaceholder: "Search titles, notes, summaries, anchors, or messages",
   searchNoResults: "No matching nodes",
+  searchOpenOnly: "Open only",
   mapSwitcherPlaceholder: "Switch Spider map...",
   mapSwitcherEmpty: "No maps found.",
   galleryEmpty: "No maps yet. Create one above.",
@@ -421,6 +428,7 @@ const en: TranslationDictionary = {
   updatedAt: "Updated {time}",
   rootNode: "Root node",
   anchor: "Source text",
+  returnToSource: "Return to source",
   summary: "Summary",
   parent: "Go to parent",
   summarize: "Summarize",
@@ -489,7 +497,8 @@ const en: TranslationDictionary = {
   sendOptionsForNode: "Configure the next question for “{title}”. Defaults return after sending.",
   defaultModelOption: "Default model",
   apply: "Apply",
-  nodeSettingsHint: "Right click a node for its actions",
+  nodeSettingsHint: "Right-click or long-press a node for its actions; press Shift + F10 with a keyboard",
+  focusCurrentPath: "Focus current question chain",
   editNodeSummary: "Edit node summary",
   summaryPlaceholder: "Edit this summary. Markdown is supported.",
   exportChooseTitle: "Choose an export format",

@@ -12,6 +12,7 @@ import {
   type NodeChange,
   type NodeProps,
   useViewport,
+  useReactFlow,
 } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
@@ -37,6 +38,7 @@ interface BranchNodeData {
   hasOutgoingEdge: boolean;
   language: AppLanguage;
   searchMatch: boolean;
+  searchTarget: boolean;
   notePinned: boolean;
   modelProfiles: ModelProfile[];
   generationJob?: NodeGenerationJob;
@@ -69,7 +71,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
         data.node.status === "understood" ? "is-understood" : ""
       } ${
         data.node.status === "archived" ? "is-archived" : ""
-      } ${data.searchMatch ? "is-search-match" : ""} ${hasNote && hasSummary ? "has-both-previews" : ""}`}
+      } ${data.searchMatch ? "is-search-match" : ""} ${data.searchTarget ? "is-search-target" : ""} ${hasNote && hasSummary ? "has-both-previews" : ""}`}
     >
       <Handle type="target" position={Position.Left} style={{ visibility: data.hasIncomingEdge ? "visible" : "hidden" }} />
       <div className="bcm-node-meta">
@@ -169,6 +171,8 @@ interface GraphCanvasProps {
   collapsedIds: Set<NodeId>;
   language: AppLanguage;
   searchMatchIds?: Set<NodeId>;
+  searchReveal?: { nodeId: NodeId; token: number };
+  focusCurrentPath?: boolean;
   modelProfiles?: ModelProfile[];
   generationJobs?: Record<NodeId, NodeGenerationJob>;
   onActivateNode(this: void, nodeId: NodeId): void;
@@ -253,6 +257,8 @@ function GraphCanvasInner({
   collapsedIds,
   language,
   searchMatchIds,
+  searchReveal,
+  focusCurrentPath = false,
   modelProfiles = [],
   generationJobs = {},
   onActivateNode,
@@ -263,6 +269,14 @@ function GraphCanvasInner({
   onCancelGeneration,
   onOpenNodeMenu,
 }: GraphCanvasProps): ReactElement {
+  const graphRef = useRef<HTMLDivElement>(null);
+  const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; nodeId: NodeId; x: number; y: number } | null>(null);
+  const lastMenuRef = useRef<{ nodeId: NodeId; time: number; source: "touch" | "other" } | null>(null);
+  const suppressClickRef = useRef<{ nodeId: NodeId; until: number } | null>(null);
+  const { fitView } = useReactFlow();
+  const [searchTargetId, setSearchTargetId] = useState<NodeId | null>(null);
+  const handledSearchToken = useRef<number | null>(null);
+  const searchHighlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [replayMode, setReplayMode] = useState<ReplayMode>("time");
   const [replayIndex, setReplayIndex] = useState(-1);
   const [replayPlaying, setReplayPlaying] = useState(false);
@@ -280,12 +294,79 @@ function GraphCanvasInner({
     }
     return allowed;
   }, [map.nodes, replayIndex, replayOrder]);
+  const activePathIds = useMemo(() => collectActivePathIds(map, activeNodeId), [activeNodeId, map]);
   const visibleIds = useMemo(() => {
     // Replay temporarily reveals prior nodes and their ancestors, while leaving the user's
     // collapsed state intact for when they restore the full graph.
-    return replayVisibleIds ?? collectVisibleNodeIds(map, collapsedIds);
-  }, [collapsedIds, map, replayVisibleIds]);
-  const activePathIds = useMemo(() => collectActivePathIds(map, activeNodeId), [activeNodeId, map]);
+    if (replayVisibleIds) return replayVisibleIds;
+    const ordinary = collectVisibleNodeIds(map, collapsedIds);
+    if (!focusCurrentPath) return ordinary;
+    const allowed = new Set(activePathIds);
+    if (!collapsedIds.has(activeNodeId)) {
+      for (const childId of map.nodes[activeNodeId]?.children ?? []) allowed.add(childId);
+    }
+    return allowed;
+  }, [activeNodeId, activePathIds, collapsedIds, focusCurrentPath, map, replayVisibleIds]);
+
+  useEffect(() => {
+    const nodeId = searchReveal?.nodeId;
+    if (!nodeId || !visibleIds.has(nodeId) || handledSearchToken.current === searchReveal?.token) return undefined;
+    const doc = graphRef.current?.ownerDocument ?? document;
+    const frame = doc.defaultView?.requestAnimationFrame(() => {
+      handledSearchToken.current = searchReveal?.token ?? null;
+      void fitView({ nodes: [{ id: nodeId }], padding: 0.55, maxZoom: 1.1, duration: 360 });
+      setSearchTargetId(nodeId);
+      const element = [...(graphRef.current?.querySelectorAll<HTMLElement>(".react-flow__node[data-id]") ?? [])]
+        .find((candidate) => candidate.dataset.id === nodeId);
+      element?.focus({ preventScroll: true });
+    });
+    if (searchHighlightTimer.current) clearTimeout(searchHighlightTimer.current);
+    searchHighlightTimer.current = setTimeout(() => setSearchTargetId((current) => current === nodeId ? null : current), 2400);
+    return () => {
+      if (frame !== undefined) doc.defaultView?.cancelAnimationFrame(frame);
+    };
+  }, [fitView, searchReveal?.token, visibleIds]);
+
+  useEffect(() => () => {
+    if (searchHighlightTimer.current) clearTimeout(searchHighlightTimer.current);
+  }, []);
+
+  const previousFocusMode = useRef(focusCurrentPath);
+  useEffect(() => {
+    const justEnabled = focusCurrentPath && !previousFocusMode.current;
+    if (!focusCurrentPath) previousFocusMode.current = false;
+    if (!justEnabled) return undefined;
+    const win = graphRef.current?.ownerDocument.defaultView;
+    const frame = win?.requestAnimationFrame(() => {
+      previousFocusMode.current = true;
+      void fitView({ nodes: [...visibleIds].map((id) => ({ id })), padding: 0.2, maxZoom: 1.1, duration: 280 });
+    });
+    return () => { if (frame !== undefined) win?.cancelAnimationFrame(frame); };
+  }, [fitView, focusCurrentPath, visibleIds]);
+
+  const clearLongPress = () => {
+    if (longPressRef.current) clearTimeout(longPressRef.current.timer);
+    longPressRef.current = null;
+  };
+
+  const menuPosition = (x: number, y: number): { x: number; y: number } => {
+    const doc = graphRef.current?.ownerDocument;
+    const width = doc?.defaultView?.innerWidth ?? 360;
+    const height = doc?.defaultView?.innerHeight ?? 640;
+    return {
+      x: Math.max(8, Math.min(x, Math.max(8, width - 240))),
+      y: Math.max(8, Math.min(y, Math.max(8, height - 270))),
+    };
+  };
+
+  const showNodeMenu = (nodeId: NodeId, x: number, y: number, source: "touch" | "other" = "other") => {
+    const recent = lastMenuRef.current;
+    if (recent?.source === "touch" && source === "other" && recent.nodeId === nodeId && Date.now() - recent.time < 700) return;
+    lastMenuRef.current = { nodeId, time: Date.now(), source };
+    onOpenNodeMenu(nodeId, menuPosition(x, y));
+  };
+
+  useEffect(() => () => clearLongPress(), []);
   const visibleEdges = useMemo(() => map.edges.filter(
     (edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to),
   ), [map.edges, visibleIds]);
@@ -398,6 +479,7 @@ function GraphCanvasInner({
           hasOutgoingEdge: connectedNodeIds.outgoing.has(node.id),
           language,
           searchMatch: searchMatchIds?.has(node.id) ?? false,
+          searchTarget: searchTargetId === node.id,
           notePinned: pinnedNoteNodeId === node.id,
           modelProfiles,
           generationJob: generationJobs[node.id],
@@ -409,7 +491,7 @@ function GraphCanvasInner({
           onCancelGeneration,
         },
       }));
-  }, [activeNodeId, activePathIds, collapsedIds, connectedNodeIds, generationJobs, language, map.nodes, map.rootNodeId, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
+  }, [activeNodeId, activePathIds, collapsedIds, connectedNodeIds, generationJobs, language, map.nodes, map.rootNodeId, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, searchTargetId, visibleIds]);
 
   const computedEdges = useMemo<Edge[]>(() => {
     return visibleEdges.map((edge) => {
@@ -530,12 +612,49 @@ function GraphCanvasInner({
 
   return (
     <div
+      ref={graphRef}
       className="bcm-graph"
       data-spider-canvas="true"
       tabIndex={0}
       role="application"
       aria-label={t(language, "graphCanvasLabel")}
       aria-description={t(language, "nodeSettingsHint")}
+      onPointerDownCapture={(event) => {
+        if (event.pointerType !== "touch" || !(event.target instanceof Element)) return;
+        const target = event.target;
+        if (target.closest("button,input,textarea,select,a,[role='button']")) return;
+        const nodeEl = target.closest<HTMLElement>(".react-flow__node[data-id]");
+        const nodeId = nodeEl?.dataset.id;
+        if (!nodeId) return;
+        clearLongPress();
+        const x = event.clientX;
+        const y = event.clientY;
+        const timer = setTimeout(() => {
+          longPressRef.current = null;
+          suppressClickRef.current = { nodeId, until: Date.now() + 800 };
+          showNodeMenu(nodeId, x, y, "touch");
+        }, 550);
+        longPressRef.current = { timer, nodeId, x, y };
+      }}
+      onPointerMoveCapture={(event) => {
+        const pending = longPressRef.current;
+        if (pending && Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > 12) clearLongPress();
+      }}
+      onPointerUpCapture={clearLongPress}
+      onPointerCancelCapture={clearLongPress}
+      onKeyDownCapture={(event) => {
+        if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+        if (!(event.target instanceof Element)) return;
+        if (event.target.closest("button,input,textarea,select,a,[contenteditable='true']")) return;
+        const nodeEl = event.target.closest<HTMLElement>(".react-flow__node[data-id]");
+        if (!nodeEl && event.target !== event.currentTarget) return;
+        const nodeId = nodeEl?.dataset.id ?? activeNodeId;
+        if (!map.nodes[nodeId]) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = nodeEl?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
+        showNodeMenu(nodeId, rect.left + Math.min(rect.width - 8, 48), rect.top + 24);
+      }}
     >
       <div id={replayPanelId} className="bcm-replay-controls" role="group" aria-label={t(language, "replay")} hidden={!replayPanelOpen} onKeyDown={handleReplayKeyDown}>
         <label>
@@ -615,18 +734,24 @@ function GraphCanvasInner({
         minZoom={0.18}
         maxZoom={1.7}
         onNodeClick={(_event, node) => {
+          if (suppressClickRef.current?.nodeId === node.id && Date.now() < suppressClickRef.current.until) {
+            suppressClickRef.current = null;
+            return;
+          }
           setPinnedNoteNodeId(null);
           onActivateNode(node.id);
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault();
-          onOpenNodeMenu(node.id, { x: event.clientX, y: event.clientY });
+          clearLongPress();
+          showNodeMenu(node.id, event.clientX, event.clientY);
         }}
         onPaneClick={() => setPinnedNoteNodeId(null)}
         onNodeDragStop={(_event, node) => {
           setGuides({ vertical: NO_GUIDES, horizontal: NO_GUIDES });
           onPositionChange(node.id, node.position);
         }}
+        onNodeDragStart={clearLongPress}
         onNodesChange={(changes: NodeChange<BranchFlowNode>[]) => {
           // Snapping and guide updates happen before the updater: an updater must stay
           // pure, and calling setGuides inside it would re-run the whole node array on

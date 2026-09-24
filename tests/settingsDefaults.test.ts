@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultSettings, detectThinkingStyle, getMissingAiConfiguration, resolveAppLanguage, resolveThinkingStyle } from "../src/settingsDefaults";
+import { createDefaultSettings, detectThinkingStyle, getMissingAiConfiguration, normalizeSettings, resolveAppLanguage, resolveThinkingStyle } from "../src/settingsDefaults";
 import type { ModelProfile } from "../src/types";
 
 function profile(overrides: Partial<ModelProfile> = {}): ModelProfile {
@@ -43,5 +43,15 @@ describe("settings defaults", () => {
     expect(resolveThinkingStyle(profile({ baseUrl: "https://api.openai.com/v1", thinkingParamStyle: "enable_thinking" }))).toBe("enable_thinking");
     expect(resolveThinkingStyle(profile({ thinkingParamStyle: "auto" }))).toBe("thinking");
     expect(resolveThinkingStyle(undefined)).toBe("none");
+  });
+
+  it("ignores invalid saved reading locations", () => {
+    const normalized = normalizeSettings({
+      lastReadLocations: {
+        good: { nodeId: "node-1", scrollTop: 123 },
+        bad: { nodeId: "node-2", scrollTop: -Infinity },
+      },
+    });
+    expect(normalized.lastReadLocations).toEqual({ good: { nodeId: "node-1", scrollTop: 123 } });
   });
 });

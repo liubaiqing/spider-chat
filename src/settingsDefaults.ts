@@ -67,6 +67,7 @@ export function createDefaultSettings(locale: string): BranchChatMapSettings {
     includeFullContext: false,
     streamResponses: true,
     onboardingCardDismissed: false,
+    lastReadLocations: {},
     models: [defaultProfile],
     defaultModelProfileId: defaultProfile.id,
     contextMode: "parent",
@@ -131,9 +132,20 @@ export function normalizeSettings(
     maxContextChars: positiveInteger(input.maxContextChars, defaults.maxContextChars ?? 12000),
     maxConcurrentGenerations: positiveInteger(input.maxConcurrentGenerations, defaults.maxConcurrentGenerations ?? 3),
     snapToGuides: typeof input.snapToGuides === "boolean" ? input.snapToGuides : defaults.snapToGuides,
+    lastReadLocations: normalizeReadLocations(input.lastReadLocations),
     includeParentContext: contextMode !== "none",
     includeFullContext: contextMode === "whole",
   };
+}
+
+function normalizeReadLocations(value: BranchChatMapSettings["lastReadLocations"]): NonNullable<BranchChatMapSettings["lastReadLocations"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: NonNullable<BranchChatMapSettings["lastReadLocations"]> = {};
+  for (const [mapId, location] of Object.entries(value).slice(-50)) {
+    if (!mapId || !location || typeof location.nodeId !== "string" || !location.nodeId || !Number.isFinite(location.scrollTop)) continue;
+    result[mapId] = { nodeId: location.nodeId, scrollTop: Math.max(0, location.scrollTop) };
+  }
+  return result;
 }
 
 export function normalizeApiBaseUrl(value: string): string {

@@ -327,6 +327,41 @@ describe("ViewState", () => {
     expect(vs.searchNodes("")).toEqual([]);
   });
 
+  it("filters open nodes in the search entry without losing text search", () => {
+    const root = createRootMap("Learning", "Learning root");
+    const first = addChildNode(root, root.rootNodeId, { title: "Explain atoms" });
+    const second = addChildNode(first.map, root.rootNodeId, { title: "Explain waves" });
+    const map = updateNode(second.map, first.child.id, { status: "understood" });
+    const vs = createViewState(map);
+
+    expect(vs.searchNodes("", true).map((result) => result.node.id)).toEqual([root.rootNodeId, second.child.id]);
+    expect(vs.searchNodes("explain", true).map((result) => result.node.id)).toEqual([second.child.id]);
+    expect(vs.searchNodes("atoms", true)).toEqual([]);
+  });
+
+  it("restores the last node and reading offset after reopening a map", async () => {
+    const root = createRootMap("Progress", "Progress root");
+    const { map, child } = addChildNode(root, root.rootNodeId, { title: "Follow-up" });
+    const pluginState = { settings: { ...settings, lastReadLocations: {} as NonNullable<BranchChatMapSettings["lastReadLocations"]> } };
+    const plugin = {
+      ...pluginState,
+      updateSettings: async (patch: Partial<BranchChatMapSettings>) => {
+        Object.assign(plugin.settings, patch);
+      },
+    } as unknown as BranchChatMapPlugin;
+    const repository = { saveMap: async () => {} };
+    const first = new ViewState(plugin, repository as never, map);
+    first.setActiveNode(child.id);
+    first.rememberReadingPosition(map.id, child.id, 318);
+    first.dispose();
+    await Promise.resolve();
+
+    const reopened = new ViewState(plugin, repository as never, map);
+    expect(reopened.getSnapshot().activeNodeId).toBe(child.id);
+    expect(reopened.getSavedReadingTop(map.id, child.id)).toBe(318);
+    reopened.dispose();
+  });
+
   it("stores and searches a personal node note without touching the AI summary", () => {
     const stableMap = createRootMap("Notes");
     const vs = createViewState(stableMap);

@@ -280,6 +280,8 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         }}
         onStatusChange={(status) => vs?.updateCurrentNodeStatus(status)}
         onTitleChange={(title) => vs?.updateCurrentNodeTitle(title)}
+        getSavedReadingTop={(mapId, nodeId) => vs?.getSavedReadingTop(mapId, nodeId)}
+        onReadingPositionChange={(mapId, nodeId, top) => vs?.rememberReadingPosition(mapId, nodeId, top)}
       />
     </div>
   );

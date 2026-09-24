@@ -3,7 +3,13 @@ import type { ChatNode } from "../types";
 import { findSourceRange } from "./messageSelection";
 
 // Reading positions belong to this chat panel, not the exported knowledge map.
-export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode[]) {
+export function useReadingPosition(
+  mapId: string,
+  node: ChatNode,
+  path: ChatNode[],
+  getSavedTop?: (mapId: string, nodeId: string) => number | undefined,
+  onPositionChange?: (mapId: string, nodeId: string, scrollTop: number) => void,
+) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const positions = useRef(new Map<string, { top: number; follow: boolean }>());
   const context = useRef<{ mapId: string; node: ChatNode; path: ChatNode[] } | null>(null);
@@ -15,6 +21,10 @@ export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode
   const highlightName = `spider-source-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const savedTopRef = useRef(getSavedTop);
+  const positionChangeRef = useRef(onPositionChange);
+  savedTopRef.current = getSavedTop;
+  positionChangeRef.current = onPositionChange;
 
   const clearHighlight = useCallback(() => {
     const win = highlightDoc.current?.defaultView as (Window & typeof globalThis) | null;
@@ -40,6 +50,8 @@ export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode
     if (!el || restore.current) return;
     follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     updateScrollState();
+    const current = context.current;
+    if (current) positionChangeRef.current?.(current.mapId, current.node.id, el.scrollTop);
   }, [updateScrollState]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -88,6 +100,11 @@ export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode
           if (target.top < bounds.top + 12 || target.bottom > bounds.bottom - 12) {
             el.scrollTop += target.top - bounds.top - Math.min(120, bounds.height / 3);
           }
+          const message = range.startContainer.parentElement?.closest<HTMLElement>(".bcm-message-assistant");
+          if (message) {
+            message.tabIndex = -1;
+            message.focus({ preventScroll: true });
+          }
           follow.current = false;
           highlightTimer.current = setTimeout(clearHighlight, 4000);
         }
@@ -98,6 +115,10 @@ export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode
 
   useLayoutEffect(() => {
     const previous = context.current;
+    if (previous && (previous.mapId !== mapId || previous.node.id !== node.id)) {
+      const previousTop = positions.current.get(`${previous.mapId}:${previous.node.id}`)?.top;
+      if (previousTop !== undefined) positionChangeRef.current?.(previous.mapId, previous.node.id, previousTop);
+    }
     context.current = { mapId, node, path };
     if (previous?.mapId === mapId && previous.node.id === node.id) return;
     clearHighlight();
@@ -105,9 +126,10 @@ export function useReadingPosition(mapId: string, node: ChatNode, path: ChatNode
       ? previous.path.find((_, index) => previous.path[index - 1]?.id === node.id)
       : undefined;
     const remembered = positions.current.get(`${mapId}:${node.id}`);
+    const savedTop = savedTopRef.current?.(mapId, node.id);
     restore.current = {
-      top: remembered?.top ?? 0,
-      follow: child?.anchorText ? false : remembered?.follow ?? true,
+      top: remembered?.top ?? savedTop ?? 0,
+      follow: child?.anchorText ? false : remembered?.follow ?? savedTop === undefined,
       source: child?.anchorText ? child : undefined,
     };
     follow.current = false;

@@ -424,6 +424,22 @@ function GraphCanvasInner({
     nodesRef.current = nodes;
   }, [nodes]);
 
+  // Cards joined by an edge pull each other's centres together, so dragging either
+  // end of a stepped link straightens it.
+  const connections = useMemo(() => {
+    const index = new Map<NodeId, Set<NodeId>>();
+    const link = (from: NodeId, to: NodeId): void => {
+      const neighbours = index.get(from) ?? new Set<NodeId>();
+      neighbours.add(to);
+      index.set(from, neighbours);
+    };
+    for (const edge of map.edges) {
+      link(edge.from, edge.to);
+      link(edge.to, edge.from);
+    }
+    return index;
+  }, [map.edges]);
+
   const toSnapBoxes = (list: readonly BranchFlowNode[], excludeId: string): SnapBox[] => list
     .filter((candidate) => candidate.id !== excludeId)
     .map((candidate) => ({
@@ -451,7 +467,9 @@ function GraphCanvasInner({
         y: change.position.y,
         width: dragged?.measured?.width ?? FALLBACK_WIDTH,
         height: dragged?.measured?.height ?? FALLBACK_HEIGHT,
-      }, toSnapBoxes(nodesRef.current, change.id));
+      }, toSnapBoxes(nodesRef.current, change.id), {
+        connected: connections.get(change.id),
+      });
       if (result.vertical.length || result.horizontal.length) {
         next = { vertical: result.vertical, horizontal: result.horizontal };
       }

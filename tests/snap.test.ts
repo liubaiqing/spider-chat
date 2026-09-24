@@ -56,6 +56,39 @@ describe("smart guides", () => {
     expect(result.vertical).toEqual([]);
   });
 
+  it("prefers a connected neighbour's centre over a closer unrelated axis", () => {
+    const moving = box("moving", 100, 300, 300, 200); // centre 400
+    // The stranger is nearer (its top edge is 1 unit away) but the parent is what
+    // makes the link straight, so the parent's centre has to win.
+    const result = snapToGuides(moving, [box("stranger", 100, 299), box("parent", 300, 305)], {
+      connected: new Set(["parent"]),
+    });
+
+    expect(result.y).toBe(305);
+    expect(result.horizontal).toEqual([405]);
+  });
+
+  it("reaches further for a connected neighbour than for an unrelated card", () => {
+    const moving = box("moving", 100, 300, 300, 200); // centre 400
+    const parent = box("parent", 300, 312); // centre 412, twelve units away
+
+    expect(snapToGuides(moving, [parent]).y).toBe(300);
+
+    const linked = snapToGuides(moving, [parent], { connected: new Set(["parent"]) });
+    expect(linked.y).toBe(312);
+    expect(linked.horizontal).toEqual([412]);
+  });
+
+  it("falls back to ordinary axes when no connected neighbour is near", () => {
+    const moving = box("moving", 100, 300, 300, 200);
+    const result = snapToGuides(moving, [box("parent", 300, 900), box("other", 103, 0)], {
+      connected: new Set(["parent"]),
+    });
+
+    expect(result.x).toBe(103);
+    expect(result.horizontal).toEqual([]);
+  });
+
   it("draws a single guide per axis even when several cards share the column", () => {
     const result = snapToGuides(box("moving", 101, 0), [box("a", 100, 500), box("b", 100, 1400)]);
 

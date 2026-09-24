@@ -33,6 +33,8 @@ interface BranchNodeData {
   isRoot: boolean;
   collapsed: boolean;
   childCount: number;
+  hasIncomingEdge: boolean;
+  hasOutgoingEdge: boolean;
   language: AppLanguage;
   searchMatch: boolean;
   notePinned: boolean;
@@ -69,7 +71,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
         data.node.status === "archived" ? "is-archived" : ""
       } ${data.searchMatch ? "is-search-match" : ""} ${hasNote && hasSummary ? "has-both-previews" : ""}`}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} style={{ visibility: data.hasIncomingEdge ? "visible" : "hidden" }} />
       <div className="bcm-node-meta">
         <span className="bcm-node-status">
           {data.isRoot ? <span className="bcm-node-root-badge">{t(data.language, "rootNode")}</span> : null}
@@ -142,7 +144,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
           <span>{t(data.language, "hasAnchorText")}</span>
         </div>
       ) : null}
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Right} style={{ visibility: data.hasOutgoingEdge ? "visible" : "hidden" }} />
     </div>
   );
 });
@@ -284,6 +286,18 @@ function GraphCanvasInner({
     return replayVisibleIds ?? collectVisibleNodeIds(map, collapsedIds);
   }, [collapsedIds, map, replayVisibleIds]);
   const activePathIds = useMemo(() => collectActivePathIds(map, activeNodeId), [activeNodeId, map]);
+  const visibleEdges = useMemo(() => map.edges.filter(
+    (edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to),
+  ), [map.edges, visibleIds]);
+  const connectedNodeIds = useMemo(() => {
+    const incoming = new Set<NodeId>();
+    const outgoing = new Set<NodeId>();
+    for (const edge of visibleEdges) {
+      outgoing.add(edge.from);
+      incoming.add(edge.to);
+    }
+    return { incoming, outgoing };
+  }, [visibleEdges]);
   const [pinnedNoteNodeId, setPinnedNoteNodeId] = useState<NodeId | null>(null);
   const preReplayActiveNodeId = useRef<NodeId | null>(null);
   const replayHelpRef = useRef<HTMLDetailsElement>(null);
@@ -380,6 +394,8 @@ function GraphCanvasInner({
           isRoot: node.id === map.rootNodeId,
           collapsed: collapsedIds.has(node.id),
           childCount: node.children.length,
+          hasIncomingEdge: connectedNodeIds.incoming.has(node.id),
+          hasOutgoingEdge: connectedNodeIds.outgoing.has(node.id),
           language,
           searchMatch: searchMatchIds?.has(node.id) ?? false,
           notePinned: pinnedNoteNodeId === node.id,
@@ -393,25 +409,23 @@ function GraphCanvasInner({
           onCancelGeneration,
         },
       }));
-  }, [activeNodeId, activePathIds, collapsedIds, generationJobs, language, map.nodes, map.rootNodeId, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
+  }, [activeNodeId, activePathIds, collapsedIds, connectedNodeIds, generationJobs, language, map.nodes, map.rootNodeId, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
 
   const computedEdges = useMemo<Edge[]>(() => {
-    return map.edges
-      .filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to))
-      .map((edge) => {
-        const targetNode = map.nodes[edge.to];
-        const isPathEdge = activePathIds.has(edge.from) && activePathIds.has(edge.to) && targetNode?.parentId === edge.from;
+    return visibleEdges.map((edge) => {
+      const targetNode = map.nodes[edge.to];
+      const isPathEdge = activePathIds.has(edge.from) && activePathIds.has(edge.to) && targetNode?.parentId === edge.from;
 
-        return {
-          id: edge.id,
-          source: edge.from,
-          target: edge.to,
-          type: "smoothstep",
-          animated: isPathEdge,
-          className: isPathEdge ? "is-path-edge" : undefined,
-        };
-      });
-  }, [activePathIds, map.edges, map.nodes, visibleIds]);
+      return {
+        id: edge.id,
+        source: edge.from,
+        target: edge.to,
+        type: "smoothstep",
+        animated: isPathEdge,
+        className: isPathEdge ? "is-path-edge" : undefined,
+      };
+    });
+  }, [activePathIds, map.nodes, visibleEdges]);
 
   const [nodes, setNodes] = useState<BranchFlowNode[]>(computedNodes);
   const [guides, setGuides] = useState<{ vertical: number[]; horizontal: number[] }>({

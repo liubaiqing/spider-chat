@@ -126,6 +126,10 @@ export class BranchChatMapView extends BranchChatMapBaseView {
     return VIEW_TYPE_BRANCH_CHAT_MAP;
   }
 
+  activateSession(): void {
+    this.plugin.store.setActiveSession(this.leafId);
+  }
+
   protected getContentClassName(): string {
     return "spider-map-view";
   }
@@ -158,8 +162,8 @@ export class BranchChatMapView extends BranchChatMapBaseView {
       }),
     );
 
-    if (this.app.workspace.getActiveViewOfType(BranchChatMapView) === this) {
-      this.plugin.store.setActiveSession(this.leafId);
+    if (this.app.workspace.getActiveViewOfType(BranchChatMapView) === this || !this.plugin.store.getActiveSession()) {
+      this.activateSession();
     }
   }
 

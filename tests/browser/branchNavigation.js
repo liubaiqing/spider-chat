@@ -242,4 +242,57 @@ window.runSourceNavigationChecks = async () => {
     await returnParent();
     assert(streamingChild.sourceMessageId && highlight()[0]?.toString() === 'StreamingSelection', 'branch created during streaming returns to the finalized answer');
   } finally { resume(); finish(); c.OpenAICompatibleProvider.prototype.streamChat = original; }
+
+  const chatRoot = view.contentEl;
+  const findAction = (label) => [...chatRoot.querySelectorAll('.bcm-node-actions button')].find(button => button.textContent.trim() === label);
+  const checkDialogCloseFocus = async ({ trigger, selector, close, label }) => {
+    trigger.focus();
+    trigger.click();
+    await delay(60);
+    const dialog = chatRoot.querySelector(selector);
+    assert(Boolean(dialog), label + ' opens');
+    close(dialog);
+    await delay(60);
+    assert(!chatRoot.querySelector(selector) && document.activeElement === trigger, label + ' close restores focus');
+  };
+  const branchTrigger = findAction('Multi-direction branch');
+  assert(Boolean(branchTrigger), 'multi-direction branch opener is available');
+  await checkDialogCloseFocus({
+    trigger: branchTrigger,
+    selector: '.bcm-branch-dialog',
+    close: dialog => dialog.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true, cancelable:true })),
+    label: 'batch Escape'
+  });
+  await checkDialogCloseFocus({
+    trigger: branchTrigger,
+    selector: '.bcm-branch-dialog',
+    close: dialog => dialog.querySelector('.bcm-dialog-footer button').click(),
+    label: 'batch Cancel'
+  });
+  await checkDialogCloseFocus({
+    trigger: branchTrigger,
+    selector: '.bcm-branch-dialog',
+    close: dialog => dialog.parentElement.dispatchEvent(new MouseEvent('mousedown', { bubbles:true })),
+    label: 'batch backdrop'
+  });
+  const mergeTrigger = findAction('Merge branches');
+  assert(Boolean(mergeTrigger), 'merge branches opener is available');
+  await checkDialogCloseFocus({
+    trigger: mergeTrigger,
+    selector: '.bcm-merge-dialog',
+    close: dialog => dialog.querySelector('input[type="search"]').dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true, cancelable:true })),
+    label: 'merge Escape'
+  });
+  await checkDialogCloseFocus({
+    trigger: mergeTrigger,
+    selector: '.bcm-merge-dialog',
+    close: dialog => dialog.querySelector('.bcm-dialog-footer button').click(),
+    label: 'merge Cancel'
+  });
+  await checkDialogCloseFocus({
+    trigger: mergeTrigger,
+    selector: '.bcm-merge-dialog',
+    close: dialog => dialog.parentElement.dispatchEvent(new MouseEvent('mousedown', { bubbles:true })),
+    label: 'merge backdrop'
+  });
 };

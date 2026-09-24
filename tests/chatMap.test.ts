@@ -32,4 +32,24 @@ describe("chat map domain", () => {
 
     expect(path.map((node) => node.id)).toEqual([rootMap.rootNodeId, first.child.id, second.child.id]);
   });
+
+  it("keeps merge references outside the structural parent path", () => {
+    const root = createRootMap("Merge provenance");
+    const left = addChildNode(root, root.rootNodeId, { defaultModelProfileId: "analyst", branchDirection: "Cost", branchColor: "#123456" });
+    const right = addChildNode(left.map, root.rootNodeId, { branchDirection: "Risk" });
+    const merged = addChildNode(right.map, left.child.id, {
+      mergeSources: [
+        { nodeId: left.child.id, titleSnapshot: left.child.title },
+        { nodeId: right.child.id, titleSnapshot: right.child.title },
+      ],
+    });
+
+    expect(merged.child.defaultModelProfileId).toBe("analyst");
+    expect(merged.child.branchColor).toBe("#123456");
+    expect(merged.child.mergeSources).toHaveLength(2);
+    expect(getAncestorPath(merged.map, merged.child.id).map((node) => node.id)).toEqual([
+      root.rootNodeId, left.child.id, merged.child.id,
+    ]);
+    expect(merged.map.edges).toHaveLength(3);
+  });
 });

@@ -1,14 +1,15 @@
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
 import { OpenAICompatibleProvider } from "../ai/openAICompatibleProvider";
+import { buildContextMessages } from "../ai/contextBuilder";
 import { createRootMap, addChildNode, appendMessage, createMessage, getAncestorPath, updateMapTitle, updateNode } from "../domain/chatMap";
 import { applyDagreLayout } from "../domain/layout";
 import { isSourceTextRange } from "../domain/guards";
 import { buildExportFiles } from "../export/exporters";
 import { t } from "../i18n";
-import { getMissingAiConfiguration } from "../settingsDefaults";
 import { MapRepository } from "../storage/mapRepository";
-import type { BranchSource, ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
+import { MapDocumentRegistry, type GenerationJob, type MapDocument } from "./mapDocument";
+import type { BranchSource, BranchChatMapSettings, ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, ContextMode, ModelProfile, NodeId } from "../types";
 import { cleanText, slugifyFileName, truncateText } from "../utils/text";
 
 export interface BranchChatMapState {
@@ -16,12 +17,20 @@ export interface BranchChatMapState {
   activeNodeId: NodeId | null;
   collapsedIds: Set<NodeId>;
   drafts: Record<NodeId, string>;
+  sendOptions: Record<NodeId, NodeSendOptions>;
   pendingNodeId: NodeId | null;
   streamingMessages: Record<NodeId, ChatMessage>;
+  generationJobs: Record<NodeId, GenerationJob>;
+  generationQueue: NodeId[];
   error: string | null;
   errorDetails: string | null;
   focusToken: number;
   hasManualPositions: boolean;
+}
+
+export interface NodeSendOptions {
+  profileId?: string;
+  contextMode?: ContextMode;
 }
 
 const INITIAL_STATE: BranchChatMapState = {
@@ -29,8 +38,11 @@ const INITIAL_STATE: BranchChatMapState = {
   activeNodeId: null,
   collapsedIds: new Set(),
   drafts: {},
+  sendOptions: {},
   pendingNodeId: null,
   streamingMessages: {},
+  generationJobs: {},
+  generationQueue: [],
   error: null,
   errorDetails: null,
   focusToken: 0,
@@ -46,29 +58,24 @@ export interface NodeSearchResult {
 export class ViewState {
   private readonly plugin: BranchChatMapPlugin;
   private readonly repository: MapRepository;
+  private readonly documents: MapDocumentRegistry;
   private readonly listeners = new Set<() => void>();
   private state: BranchChatMapState = INITIAL_STATE;
-  private loadPromise: Promise<void> | null = null;
-  private abortController: AbortController | null = null;
+  private document: MapDocument | null = null;
+  private unsubscribeDocument: (() => void) | null = null;
+  private unsubscribeForgotten: (() => void) | null = null;
+  private readonly auxiliaryControllers = new Set<AbortController>();
+  private loadEpoch = 0;
+  private disposed = false;
   private loadedMapId: ChatMapId | null = null;
 
-  constructor(plugin: BranchChatMapPlugin, repository: MapRepository, initialMap?: ChatMap) {
+  constructor(plugin: BranchChatMapPlugin, repository: MapRepository, initialMap?: ChatMap, documents?: MapDocumentRegistry) {
     this.plugin = plugin;
     this.repository = repository;
+    this.documents = documents ?? new MapDocumentRegistry(repository);
+    this.unsubscribeForgotten = this.documents.subscribeForgotten((mapId) => this.handleForgottenMap(mapId));
     if (initialMap) {
-      this.loadedMapId = initialMap.id;
-      this.state = {
-        map: initialMap,
-        activeNodeId: initialMap.rootNodeId,
-        collapsedIds: new Set(),
-        drafts: {},
-        pendingNodeId: null,
-        streamingMessages: {},
-        error: null,
-        errorDetails: null,
-        focusToken: 0,
-        hasManualPositions: false,
-      };
+      this.attachMap(initialMap, true);
     }
   }
 
@@ -86,21 +93,16 @@ export class ViewState {
   }
 
   async load(mapId?: ChatMapId): Promise<void> {
-    if (!mapId && this.loadPromise) {
-      return this.loadPromise;
-    }
-
-    this.loadPromise = mapId ? this.loadById(mapId) : this.loadLatest();
-    return this.loadPromise;
+    const epoch = ++this.loadEpoch;
+    if (mapId) return this.loadById(mapId, epoch);
+    return this.loadLatest(epoch);
   }
 
   async createNewRootMap(): Promise<ChatMap> {
     const language = this.plugin.settings.language;
     const map = applyDagreLayout(createRootMap(t(language, "defaultMapTitle"), t(language, "rootQuestionTitle")));
     await this.repository.saveMap(map);
-    this.abortController?.abort();
-    this.abortController = null;
-    this.resetToMap(map);
+    this.attachMap(map, true);
     return map;
   }
 
@@ -114,7 +116,7 @@ export class ViewState {
 
   createChild(anchorText?: string, source?: BranchSource): void {
     const { map, activeNodeId } = this.state;
-    if (!map || !activeNodeId) {
+    if (!map || !activeNodeId || !this.document) {
       return;
     }
 
@@ -125,20 +127,26 @@ export class ViewState {
       || (streamingMessage?.id === source.messageId && streamingMessage.role === "assistant")
     ) ? source : undefined;
     const language = this.plugin.settings.language;
-    const { map: nextMap, child } = addChildNode(map, activeNodeId, {
-      anchorText: selectedText || undefined,
-      title: selectedText ? undefined : t(language, "untitledQuestionTitle"),
-      source: validSource,
+    let child: ChatNode | null = null;
+    this.commitMap((currentMap) => {
+      if (!currentMap.nodes[activeNodeId]) return currentMap;
+      const result = addChildNode(currentMap, activeNodeId, {
+        anchorText: selectedText || undefined,
+        title: selectedText ? undefined : t(language, "untitledQuestionTitle"),
+        source: validSource,
+      });
+      child = result.child;
+      return result.map;
     });
-
-    this.commitMap(nextMap);
+    const createdChild = child as ChatNode | null;
+    if (!createdChild) return;
     this.setState({
-      activeNodeId: child.id,
+      activeNodeId: createdChild.id,
       focusToken: this.state.focusToken + 1,
       drafts: selectedText
         ? {
             ...this.state.drafts,
-            [child.id]: language === "zh-CN"
+            [createdChild.id]: language === "zh-CN"
               ? `请解释这段内容：${truncateText(selectedText, 120)}`
               : `Please explain this: ${truncateText(selectedText, 120)}`,
           }
@@ -160,7 +168,7 @@ export class ViewState {
 
   deleteNode(nodeId: NodeId): void {
     const { map, activeNodeId } = this.state;
-    if (!map || !activeNodeId || nodeId === map.rootNodeId) {
+    if (!map || !activeNodeId || nodeId === map.rootNodeId || !this.document) {
       return;
     }
 
@@ -169,28 +177,10 @@ export class ViewState {
       return;
     }
 
-    let nextMap = {
-      ...map,
-      nodes: { ...map.nodes },
-      edges: [...map.edges],
-    };
-
-    if (node.parentId) {
-      const parent = nextMap.nodes[node.parentId];
-      if (parent) {
-        nextMap.nodes[node.parentId] = {
-          ...parent,
-          children: parent.children.filter((id) => id !== nodeId),
-        };
-      }
-    }
-
-    nextMap.edges = nextMap.edges.filter((e) => e.from !== nodeId && e.to !== nodeId);
-
     const toDelete = new Set<NodeId>();
     const collect = (id: NodeId): void => {
       toDelete.add(id);
-      const n = nextMap.nodes[id];
+      const n = this.document?.map.nodes[id];
       if (n) {
         for (const cid of n.children) {
           collect(cid);
@@ -200,17 +190,35 @@ export class ViewState {
     collect(nodeId);
 
     for (const id of toDelete) {
-      delete nextMap.nodes[id];
+      this.document.cancelGeneration(id);
+      this.document.setStreamingMessage(id, null);
     }
 
-    const nextActiveId = activeNodeId === nodeId ? (node.parentId ?? map.rootNodeId) : activeNodeId;
-    this.commitMap(nextMap as ChatMap);
-    this.setState({ activeNodeId: nextActiveId });
+    const nextActiveId = toDelete.has(activeNodeId) ? (node.parentId ?? map.rootNodeId) : activeNodeId;
+    this.commitMap((currentMap) => {
+      const currentNode = currentMap.nodes[nodeId];
+      if (!currentNode || nodeId === currentMap.rootNodeId) return currentMap;
+      const nextMap: ChatMap = {
+        ...currentMap,
+        nodes: { ...currentMap.nodes },
+        edges: currentMap.edges.filter((edge) => !toDelete.has(edge.from) && !toDelete.has(edge.to)),
+      };
+      if (currentNode.parentId) {
+        const parent = nextMap.nodes[currentNode.parentId];
+        if (parent) nextMap.nodes[currentNode.parentId] = { ...parent, children: parent.children.filter((id) => id !== nodeId) };
+      }
+      for (const id of toDelete) delete nextMap.nodes[id];
+      return nextMap;
+    });
+    const sendOptions = { ...this.state.sendOptions };
+    for (const id of toDelete) delete sendOptions[id];
+    this.setState({ activeNodeId: nextActiveId, sendOptions });
   }
 
   async summarizeCurrentNode(): Promise<void> {
     const { map, activeNodeId } = this.state;
-    if (!map || !activeNodeId) {
+    const document = this.document;
+    if (!map || !activeNodeId || !document) {
       return;
     }
 
@@ -220,44 +228,62 @@ export class ViewState {
     }
 
     const controller = new AbortController();
-    this.abortController = controller;
+    this.auxiliaryControllers.add(controller);
     this.setState({ error: null, errorDetails: null });
 
     try {
+      const answerProfileId = [...node.messages].reverse().find((message) => message.role === "assistant")?.modelSnapshot?.profileId;
+      const resolved = await this.resolveProfile(answerProfileId ?? node.defaultModelProfileId);
+      if (resolved.fellBack) this.noticeProfileFallback();
+      const missingConfiguration = this.getMissingProfileConfiguration(resolved.profile);
+      if (missingConfiguration) throw new Error(t(this.plugin.settings.language, missingConfiguration === "apiBaseUrl"
+        ? "missingApiBaseUrl"
+        : missingConfiguration === "apiKey"
+          ? "missingApiKey"
+          : "missingModel"));
       const provider = new OpenAICompatibleProvider(this.plugin.settings);
-      const summary = await provider.summarizeNode(node, controller.signal);
-      const currentMap = this.state.map;
-      if (controller.signal.aborted || currentMap?.id !== map.id || !currentMap.nodes[activeNodeId]) return;
-      this.commitMap(updateNode(currentMap, activeNodeId, { summary }));
+      const summary = await provider.summarizeNode(node, controller.signal, resolved.profile);
+      const currentMap = document.map;
+      if (controller.signal.aborted || !document.isValid || currentMap.id !== map.id || !currentMap.nodes[activeNodeId]) return;
+      document.commit((latestMap) => {
+        const currentNode = latestMap.nodes[activeNodeId];
+        return currentNode && currentNode.summary === node.summary && currentNode.summaryEditedByUser === node.summaryEditedByUser
+          ? updateNode(latestMap, activeNodeId, { summary, summaryEditedByUser: false })
+          : latestMap;
+      });
     } catch (summaryError: unknown) {
-      this.reportError(summaryError);
+      if (this.document === document) this.reportError(summaryError);
     } finally {
-      if (this.abortController === controller) this.abortController = null;
+      this.auxiliaryControllers.delete(controller);
     }
   }
 
   async deleteCurrentMap(): Promise<boolean> {
     const { map } = this.state;
-    if (!map) {
+    if (!map || !this.document) {
       return false;
     }
 
+    await this.documents.invalidateAndFlush(map.id);
     const removed = await this.repository.deleteMap(map.id);
     if (!removed) {
+      await this.documents.forget(map.id);
       return false;
     }
 
     const remaining = await this.repository.listMaps();
     if (remaining.length > 0) {
-      await this.loadLatest();
+      await this.loadLatest(++this.loadEpoch);
     } else {
       const language = this.plugin.settings.language;
       const fresh = applyDagreLayout(
         createRootMap(t(language, "defaultMapTitle"), t(language, "rootQuestionTitle")),
       );
       await this.repository.saveMap(fresh);
-      this.resetToMap(fresh);
+      this.attachMap(fresh, true);
     }
+
+    await this.documents.forget(map.id);
 
     return true;
   }
@@ -271,7 +297,11 @@ export class ViewState {
     try {
       const exportMap = await this.prepareMapForExport(map);
       const folder = await this.repository.createExportFolder(`${this.plugin.settings.defaultExportFolder}/${this.exportFolderName(exportMap)}`);
-      const files = buildExportFiles(exportMap, { exportFolder: folder, language: this.plugin.settings.language });
+      const files = buildExportFiles(exportMap, {
+        exportFolder: folder,
+        language: this.plugin.settings.language,
+        modelProfiles: this.plugin.settings.models,
+      });
       let entryPath = "";
 
       for (const file of files) {
@@ -287,58 +317,125 @@ export class ViewState {
     }
   }
 
-  async sendMessage(): Promise<void> {
-    const { map, activeNodeId, drafts, pendingNodeId } = this.state;
-    if (!map || !activeNodeId || pendingNodeId) {
-      return;
-    }
-
-    const missingConfiguration = getMissingAiConfiguration(this.plugin.settings);
-    if (missingConfiguration) {
-      const errorKey = missingConfiguration === "apiBaseUrl"
-        ? "missingApiBaseUrl"
-        : missingConfiguration === "apiKey"
-          ? "missingApiKey"
-          : "missingModel";
-      this.setState({ error: t(this.plugin.settings.language, errorKey), errorDetails: null });
-      return;
-    }
-
+  async sendMessage(options: { profileId?: string; contextMode?: ContextMode } = {}, targetNodeId?: NodeId): Promise<void> {
+    const { drafts } = this.state;
+    const activeNodeId = targetNodeId ?? this.state.activeNodeId;
+    const requestSettings = this.settingsSnapshot();
+    const document = this.document;
+    if (!document || !activeNodeId || !document.map.nodes[activeNodeId]) return;
     const draft = drafts[activeNodeId]?.trim();
-    if (!draft) {
+    if (!draft || !document.tryBeginSubmission(activeNodeId)) return;
+
+    let profile: ModelProfile;
+    try {
+      const resolved = await this.resolveProfile(options.profileId ?? document.map.nodes[activeNodeId]?.defaultModelProfileId);
+      profile = resolved.profile;
+      if (resolved.fellBack) this.noticeProfileFallback();
+      const missingConfiguration = this.getMissingProfileConfiguration(profile);
+      if (missingConfiguration) {
+        const errorKey = missingConfiguration === "apiBaseUrl"
+          ? "missingApiBaseUrl"
+          : missingConfiguration === "apiKey"
+            ? "missingApiKey"
+            : "missingModel";
+        if (this.document === document) this.setState({ error: t(requestSettings.language, errorKey), errorDetails: null });
+        document.finishSubmission(activeNodeId);
+        return;
+      }
+    } catch (profileError: unknown) {
+      document.finishSubmission(activeNodeId);
+      if (this.document === document) this.reportError(profileError);
       return;
     }
 
-    const userMap = appendMessage(map, activeNodeId, createMessage("user", draft));
-    this.setState({
-      drafts: {
-        ...drafts,
-        [activeNodeId]: "",
-      },
+    if (!document.isValid || !document.map.nodes[activeNodeId]) {
+      document.finishSubmission(activeNodeId);
+      return;
+    }
+
+    const userMessage = createMessage("user", draft);
+    document.commit((currentMap) => {
+      const node = currentMap.nodes[activeNodeId];
+      if (!node) return currentMap;
+      return updateNode(currentMap, activeNodeId, {
+        messages: [...node.messages, userMessage],
+      });
     });
-    this.commitMap(userMap);
-    await this.generateAssistant(userMap, activeNodeId);
+    const currentDraft = this.document === document ? this.state.drafts[activeNodeId] : undefined;
+    if (currentDraft?.trim() === draft) {
+      this.setState({ drafts: { ...this.state.drafts, [activeNodeId]: "" } });
+    }
+
+    try {
+      // The conversation turn reaches disk before the provider can receive it.
+      await document.flushWrites();
+    } catch (saveError: unknown) {
+      document.setGenerationError(activeNodeId, saveError, profile.id);
+      document.finishSubmission(activeNodeId);
+      if (this.document === document) this.reportError(saveError);
+      return;
+    }
+
+    const contextMode = options.contextMode ?? requestSettings.contextMode;
+    document.setMaxConcurrent(requestSettings.maxConcurrentGenerations ?? 3);
+    await document.enqueueGeneration(activeNodeId, profile.id, (controller) =>
+      this.generateAssistant(document, activeNodeId, profile, contextMode, requestSettings, controller));
   }
 
-  async retryAssistant(): Promise<void> {
-    const { map, activeNodeId, pendingNodeId } = this.state;
-    if (!map || !activeNodeId || pendingNodeId) {
-      return;
-    }
+  async retryAssistant(nodeId: NodeId = this.state.activeNodeId ?? ""): Promise<void> {
+    const document = this.document;
+    const requestSettings = this.settingsSnapshot();
+    if (!document || !nodeId || !document.map.nodes[nodeId] || !document.tryBeginSubmission(nodeId)) return;
 
-    const requestNode = map.nodes[activeNodeId];
-    if (!requestNode || requestNode.messages.at(-1)?.role !== "user") {
+    const node = document.map.nodes[nodeId];
+    const lastMessage = node.messages.at(-1);
+    if (lastMessage?.role !== "user") {
+      document.finishSubmission(nodeId);
       this.setState({ error: t(this.plugin.settings.language, "retryUnavailable"), errorDetails: null });
       return;
     }
 
-    await this.generateAssistant(map, activeNodeId);
+    const failedProfileId = document.getSnapshot().generationJobs[nodeId]?.profileId;
+
+    let profile: ModelProfile;
+    try {
+      const resolved = await this.resolveProfile(failedProfileId ?? node.defaultModelProfileId);
+      profile = resolved.profile;
+      if (resolved.fellBack) this.noticeProfileFallback();
+      const missingConfiguration = this.getMissingProfileConfiguration(profile);
+      if (missingConfiguration) {
+        const errorKey = missingConfiguration === "apiBaseUrl"
+          ? "missingApiBaseUrl"
+          : missingConfiguration === "apiKey"
+            ? "missingApiKey"
+            : "missingModel";
+        if (this.document === document) this.setState({ error: t(this.plugin.settings.language, errorKey), errorDetails: null });
+        document.setGenerationError(nodeId, new Error(t(this.plugin.settings.language, errorKey)), profile.id);
+        document.finishSubmission(nodeId);
+        return;
+      }
+    } catch (profileError: unknown) {
+      document.finishSubmission(nodeId);
+      if (this.document === document) this.reportError(profileError);
+      return;
+    }
+
+    const contextMode = requestSettings.contextMode;
+    document.setMaxConcurrent(requestSettings.maxConcurrentGenerations ?? 3);
+    try {
+      await document.persistCurrent();
+    } catch (saveError: unknown) {
+      document.setGenerationError(nodeId, saveError, profile.id);
+      document.finishSubmission(nodeId);
+      if (this.document === document) this.reportError(saveError);
+      return;
+    }
+    await document.enqueueGeneration(nodeId, profile.id, (controller) =>
+      this.generateAssistant(document, nodeId, profile, contextMode, requestSettings, controller));
   }
 
-  cancelGeneration(): void {
-    this.abortController?.abort();
-    this.abortController = null;
-    this.setState({ pendingNodeId: null });
+  cancelGeneration(nodeId?: NodeId): void {
+    this.document?.cancelGeneration(nodeId);
   }
 
   updateDraft(nodeId: NodeId, value: string): void {
@@ -350,6 +447,11 @@ export class ViewState {
     });
   }
 
+  updateSendOptions(nodeId: NodeId, options: NodeSendOptions): void {
+    if (!this.state.map?.nodes[nodeId]) return;
+    this.setState({ sendOptions: { ...this.state.sendOptions, [nodeId]: options } });
+  }
+
   updateCurrentNodeTitle(title: string): void {
     const cleanTitle = title.trim();
     const { map, activeNodeId } = this.state;
@@ -357,12 +459,12 @@ export class ViewState {
       return;
     }
 
-    let nextMap = updateNode(map, activeNodeId, { title: cleanTitle });
-    if (activeNodeId === map.rootNodeId) {
-      nextMap = updateMapTitle(nextMap, cleanTitle);
-    }
-
-    this.commitMap(nextMap);
+    this.commitMap((currentMap) => {
+      if (!currentMap.nodes[activeNodeId]) return currentMap;
+      let nextMap = updateNode(currentMap, activeNodeId, { title: cleanTitle });
+      if (activeNodeId === currentMap.rootNodeId) nextMap = updateMapTitle(nextMap, cleanTitle);
+      return nextMap;
+    });
   }
 
   markUnderstood(): void {
@@ -375,7 +477,9 @@ export class ViewState {
       return;
     }
 
-    this.commitMap(updateNode(map, activeNodeId, { status }));
+    this.commitMap((currentMap) => currentMap.nodes[activeNodeId]
+      ? updateNode(currentMap, activeNodeId, { status })
+      : currentMap);
   }
 
   updateNodeNote(nodeId: NodeId, note: string): void {
@@ -385,11 +489,20 @@ export class ViewState {
     }
 
     const normalizedNote = note.trim() ? note.trimEnd() : undefined;
-    if ((map.nodes[nodeId]?.note ?? undefined) === normalizedNote) {
-      return;
-    }
+    if ((map.nodes[nodeId]?.note ?? undefined) === normalizedNote) return;
+    this.commitMap((currentMap) => {
+      if (!currentMap.nodes[nodeId] || (currentMap.nodes[nodeId]?.note ?? undefined) === normalizedNote) return currentMap;
+      return updateNode(currentMap, nodeId, { note: normalizedNote });
+    });
+  }
 
-    this.commitMap(updateNode(map, nodeId, { note: normalizedNote }));
+  updateNodeSummary(nodeId: NodeId, summary: string): void {
+    const normalizedSummary = summary.trim() ? summary.trimEnd() : undefined;
+    const currentNode = this.state.map?.nodes[nodeId];
+    if (!currentNode || (currentNode.summary ?? undefined) === normalizedSummary) return;
+    this.commitMap((currentMap) => currentMap.nodes[nodeId]
+      ? updateNode(currentMap, nodeId, { summary: normalizedSummary, summaryEditedByUser: true })
+      : currentMap);
   }
 
   updatePosition(nodeId: NodeId, position: { x: number; y: number }): void {
@@ -398,7 +511,9 @@ export class ViewState {
       return;
     }
 
-    this.commitMap(updateNode(map, nodeId, { position }));
+    this.commitMap((currentMap) => currentMap.nodes[nodeId]
+      ? updateNode(currentMap, nodeId, { position })
+      : currentMap);
     this.setState({ hasManualPositions: true });
   }
 
@@ -416,7 +531,7 @@ export class ViewState {
   autoLayout(): void {
     const { map } = this.state;
     if (map) {
-      this.commitMap(applyDagreLayout(map));
+      this.commitMap((currentMap) => applyDagreLayout(currentMap));
       this.setState({ hasManualPositions: false });
     }
   }
@@ -503,171 +618,255 @@ export class ViewState {
   }
 
   dispose(): void {
-    this.abortController?.abort();
+    if (this.disposed) return;
+    this.disposed = true;
+    this.loadEpoch += 1;
+    this.unsubscribeDocument?.();
+    this.unsubscribeDocument = null;
+    this.unsubscribeForgotten?.();
+    this.unsubscribeForgotten = null;
+    for (const controller of this.auxiliaryControllers) controller.abort();
+    this.auxiliaryControllers.clear();
     this.listeners.clear();
   }
 
-  private async loadLatest(): Promise<void> {
+  private async loadLatest(epoch: number): Promise<void> {
     try {
       const lastId = this.plugin.settings.lastOpenedMapId;
       let loaded: ChatMap | null = null;
 
       if (lastId) {
         loaded = await this.repository.loadMap(lastId);
+        if (epoch !== this.loadEpoch || this.disposed) return;
       }
 
       if (!loaded) {
         loaded = await this.repository.loadLatestMap();
+        if (epoch !== this.loadEpoch || this.disposed) return;
       }
 
       const language = this.plugin.settings.language;
       const initial = loaded ?? applyDagreLayout(createRootMap(t(language, "defaultMapTitle"), t(language, "rootQuestionTitle")));
       if (!loaded) {
+        if (epoch !== this.loadEpoch || this.disposed) return;
         await this.repository.saveMap(initial);
       }
-
-      this.loadedMapId = initial.id;
-      this.setState({
-        map: initial,
-        activeNodeId: initial.rootNodeId,
-        error: null,
-        errorDetails: null,
-      });
+      if (epoch !== this.loadEpoch || this.disposed) return;
+      this.attachMap(initial, true);
     } catch (loadError: unknown) {
-      this.reportError(loadError);
+      if (epoch === this.loadEpoch && !this.disposed) this.reportError(loadError);
     }
   }
 
-  private async loadById(mapId: ChatMapId): Promise<void> {
+  private async loadById(mapId: ChatMapId, epoch: number): Promise<void> {
     try {
       const loaded = await this.repository.loadMap(mapId);
-      if (!loaded) {
+      if (!loaded || epoch !== this.loadEpoch || this.disposed) {
         return;
       }
 
-      void this.plugin.updateSettings({ lastOpenedMapId: loaded.id });
-
-      this.loadedMapId = loaded.id;
-      this.setState({
-        map: loaded,
-        activeNodeId: loaded.rootNodeId,
-        collapsedIds: new Set(),
-        drafts: {},
-        pendingNodeId: null,
-        streamingMessages: {},
-        error: null,
-        errorDetails: null,
-        focusToken: 0,
-        hasManualPositions: false,
-      });
+      const updateSettings = (this.plugin as unknown as { updateSettings?: (patch: Partial<BranchChatMapSettings>) => Promise<void> }).updateSettings;
+      if (typeof updateSettings === "function") void updateSettings.call(this.plugin, { lastOpenedMapId: loaded.id });
+      this.attachMap(loaded, true);
     } catch (loadError: unknown) {
-      this.reportError(loadError);
+      if (epoch === this.loadEpoch && !this.disposed) this.reportError(loadError);
     }
   }
 
-  private resetToMap(map: ChatMap): void {
-    this.loadedMapId = map.id;
+  private attachMap(map: ChatMap, resetUi: boolean): void {
+    this.unsubscribeDocument?.();
+    this.document = this.documents.get(map);
+    this.loadedMapId = this.document.map.id;
+    this.unsubscribeDocument = this.document.subscribe(() => this.syncDocument());
+    const activeNodeId = resetUi || !this.document.map.nodes[this.state.activeNodeId ?? ""]
+      ? this.document.map.rootNodeId
+      : this.state.activeNodeId;
     this.state = {
-      map,
-      activeNodeId: map.rootNodeId,
-      collapsedIds: new Set(),
-      drafts: {},
+      ...this.state,
+      map: this.document.map,
+      activeNodeId,
+      collapsedIds: resetUi ? new Set() : this.state.collapsedIds,
+      drafts: resetUi ? {} : this.state.drafts,
+      sendOptions: resetUi ? {} : this.state.sendOptions,
       pendingNodeId: null,
       streamingMessages: {},
+      generationJobs: {},
+      generationQueue: [],
       error: null,
       errorDetails: null,
-      focusToken: 0,
-      hasManualPositions: false,
+      focusToken: resetUi ? 0 : this.state.focusToken,
+      hasManualPositions: resetUi ? false : this.state.hasManualPositions,
+    };
+    this.syncDocument();
+  }
+
+  private handleForgottenMap(mapId: string): void {
+    if (this.disposed || this.document?.id !== mapId) return;
+    this.unsubscribeDocument?.();
+    this.unsubscribeDocument = null;
+    this.document = null;
+    this.loadedMapId = null;
+    this.state = {
+      ...INITIAL_STATE,
+      collapsedIds: new Set(),
+      drafts: {},
+      sendOptions: {},
+      streamingMessages: {},
+      generationJobs: {},
+      generationQueue: [],
     };
     this.emit();
+    void this.load();
   }
 
-  private commitMap(nextMap: ChatMap): void {
-    this.setState({ map: nextMap });
-    void this.repository.saveMap(nextMap).catch((saveError: unknown) => this.reportError(saveError));
-  }
-
-  private buildContextMessages(map: ChatMap, currentNodeId: NodeId): ChatMessage[] {
-    const result: ChatMessage[] = [];
-
-    for (const node of Object.values(map.nodes)) {
-      if (node.id === currentNodeId || node.messages.length === 0) {
-        continue;
-      }
-
-      result.push({
-        id: `ctx_${node.id}_header`,
-        role: "system",
-        content: `[Node: ${node.title}]`,
-        createdAt: node.createdAt,
-      });
-
-      for (const msg of node.messages) {
-        result.push({
-          id: `ctx_${msg.id}`,
-          role: msg.role,
-          content: msg.content,
-          createdAt: msg.createdAt,
-        });
-      }
-    }
-
-    return result;
-  }
-
-  private async generateAssistant(baseMap: ChatMap, nodeId: NodeId): Promise<void> {
-    const requestNode = baseMap.nodes[nodeId];
-    if (!requestNode) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const assistantMessage = createMessage("assistant", "");
-    this.abortController = controller;
+  private syncDocument(): void {
+    const document = this.document;
+    if (!document || this.disposed) return;
+    const snapshot = document.getSnapshot();
+    const activeJob = this.state.activeNodeId ? snapshot.generationJobs[this.state.activeNodeId] : undefined;
+    const error = snapshot.error ?? (activeJob?.status === "error" ? activeJob.error ?? null : null);
+    const errorDetails = snapshot.errorDetails ?? (activeJob?.status === "error" ? activeJob.errorDetails ?? null : null);
     this.setState({
-      pendingNodeId: nodeId,
-      error: null,
-      errorDetails: null,
-      streamingMessages: {
-        ...this.state.streamingMessages,
-        [nodeId]: assistantMessage,
-      },
+      map: snapshot.map,
+      generationJobs: snapshot.generationJobs,
+      generationQueue: snapshot.generationQueue,
+      streamingMessages: snapshot.streamingMessages,
+      pendingNodeId: activeJob && (activeJob.status === "queued" || activeJob.status === "running")
+        ? activeJob.nodeId
+        : null,
+      error,
+      errorDetails,
     });
+  }
+
+  private commitMap(update: (currentMap: ChatMap) => ChatMap): ChatMap | null {
+    if (!this.document?.isValid) return this.document?.map ?? null;
+    const nextMap = this.document.commit(update);
+    return nextMap;
+  }
+
+  private async resolveProfile(id?: string): Promise<{ profile: ModelProfile; fellBack: boolean }> {
+    const pluginWithResolver = this.plugin as unknown as {
+      resolveProfileForRequest?: (profileId?: string) => Promise<{ profile: ModelProfile; fellBack: boolean }>;
+    };
+    if (typeof pluginWithResolver.resolveProfileForRequest === "function") {
+      return pluginWithResolver.resolveProfileForRequest.call(this.plugin, id);
+    }
+
+    const settings = this.plugin.settings;
+    const selected = id ? settings.models?.find((profile) => profile.id === id) : undefined;
+    const fallback = settings.models?.find((profile) => profile.id === settings.defaultModelProfileId)
+      ?? settings.models?.[0];
+    if (selected) {
+      const profile = { ...selected };
+      // Older plugin callers (including the browser harness) can still provide
+      // credentials only on the legacy top-level settings fields. Normalize
+      // those into the default profile without borrowing them for named profiles.
+      if (profile.id === settings.defaultModelProfileId) {
+        profile.baseUrl ||= settings.apiBaseUrl;
+        profile.apiKey ||= settings.apiKey;
+        profile.model ||= settings.model;
+      }
+      return { profile, fellBack: false };
+    }
+    if (fallback) {
+      const profile = { ...fallback };
+      if (profile.id === settings.defaultModelProfileId) {
+        profile.baseUrl ||= settings.apiBaseUrl;
+        profile.apiKey ||= settings.apiKey;
+        profile.model ||= settings.model;
+      }
+      return { profile, fellBack: Boolean(id && id !== fallback.id) };
+    }
+    return {
+      profile: {
+        id: id || settings.defaultModelProfileId || "legacy-default",
+        alias: "Default",
+        model: settings.model,
+        baseUrl: settings.apiBaseUrl,
+        apiKey: settings.apiKey,
+      },
+      fellBack: false,
+    };
+  }
+
+  private settingsSnapshot(): BranchChatMapSettings {
+    const settings = this.plugin.settings;
+    return {
+      ...settings,
+      models: settings.models?.map((profile) => ({ ...profile })),
+    };
+  }
+
+  private getMissingProfileConfiguration(profile: ModelProfile): "apiBaseUrl" | "apiKey" | "model" | null {
+    if (!profile.baseUrl.trim()) return "apiBaseUrl";
+    if (!profile.apiKey.trim()) return "apiKey";
+    if (!profile.model.trim()) return "model";
+    return null;
+  }
+
+  private noticeProfileFallback(): void {
+    const message = this.plugin.settings.language === "zh-CN"
+      ? "所选模型配置不可用，已改用默认模型。"
+      : "The selected model profile is unavailable. Using the default profile.";
+    new Notice(message);
+  }
+
+  private async generateAssistant(
+    document: MapDocument,
+    nodeId: NodeId,
+    profile: ModelProfile,
+    contextMode: ContextMode | undefined,
+    requestSettings: BranchChatMapSettings,
+    controller: AbortController,
+  ): Promise<void> {
+    const baseMap = document.map;
+    const requestNode = baseMap.nodes[nodeId];
+    if (!requestNode || !document.isValid) return;
+
+    const assistantMessage: ChatMessage = {
+      ...createMessage("assistant", ""),
+      modelSnapshot: { profileId: profile.id, alias: profile.alias, model: profile.model },
+    };
+    document.setStreamingMessage(nodeId, assistantMessage);
 
     let answer = "";
     let streamUpdateTimer: ReturnType<typeof setTimeout> | undefined;
     const currentMap = () => {
-      const map = this.state.map;
-      return map?.id === baseMap.id && map.nodes[nodeId]
-        && this.state.streamingMessages[nodeId]?.id === assistantMessage.id ? map : null;
+      if (!document.isValid) return null;
+      const snapshot = document.getSnapshot();
+      return document.map.id === baseMap.id && document.map.nodes[nodeId]
+        && snapshot.streamingMessages[nodeId]?.id === assistantMessage.id ? document.map : null;
     };
     const publishStream = () => {
       streamUpdateTimer = undefined;
-      if (controller.signal.aborted || this.abortController !== controller || !currentMap()) return;
-      this.setState({
-        streamingMessages: {
-          ...this.state.streamingMessages,
-          [nodeId]: { ...assistantMessage, content: answer },
-        },
-      });
+      if (controller.signal.aborted || !currentMap()) return;
+      document.setStreamingMessage(nodeId, { ...assistantMessage, content: answer });
     };
 
     try {
-      const provider = new OpenAICompatibleProvider(this.plugin.settings);
+      const provider = new OpenAICompatibleProvider(requestSettings);
       const parent = requestNode.parentId ? baseMap.nodes[requestNode.parentId] : undefined;
-      const contextMessages = this.plugin.settings.includeFullContext
-        ? this.buildContextMessages(baseMap, nodeId)
-        : undefined;
+      const contextMessages = buildContextMessages(baseMap, nodeId, contextMode, requestSettings);
+      const includeParentContext = contextMode === undefined
+        ? requestSettings.includeParentContext
+        : contextMode !== "none";
+      const systemPromptOverride = profile.systemPrompt?.trim() || undefined;
+      const request = {
+        node: requestNode,
+        parent,
+        contextMessages,
+        model: profile.model,
+        includeParentContext,
+        signal: controller.signal,
+        profile,
+        contextMode,
+        systemPromptOverride,
+      };
 
-      if (this.plugin.settings.streamResponses) {
-        for await (const chunk of provider.streamChat({
-          node: requestNode,
-          parent,
-          contextMessages,
-          model: this.plugin.settings.model,
-          includeParentContext: this.plugin.settings.includeParentContext,
-          signal: controller.signal,
-        })) {
+      if (requestSettings.streamResponses) {
+        for await (const chunk of provider.streamChat(request)) {
+          controller.signal.throwIfAborted();
           answer += chunk;
           // Batch token bursts before notifying React and rendering Markdown.
           streamUpdateTimer ??= setTimeout(publishStream, 32);
@@ -675,45 +874,46 @@ export class ViewState {
         clearTimeout(streamUpdateTimer);
         publishStream();
       } else {
-        answer = await provider.chat({
-          node: requestNode,
-          parent,
-          contextMessages,
-          model: this.plugin.settings.model,
-          includeParentContext: this.plugin.settings.includeParentContext,
-          signal: controller.signal,
-        });
+        answer = await provider.chat(request);
         publishStream();
       }
 
       controller.signal.throwIfAborted();
-      let latestMap = currentMap();
-      if (!latestMap) return;
-      // Commit the answer to the live map before optional AI metadata requests.
-      this.commitMap(appendMessage(latestMap, nodeId, { ...assistantMessage, content: answer }));
-      const updatedNode = this.state.map?.nodes[nodeId];
-      if (this.plugin.settings.autoSummarizeNodes && updatedNode) {
-        const summary = await provider.summarizeNode(updatedNode, controller.signal);
+      answer = answer.trim();
+      if (!currentMap()) return;
+      document.commit((currentMapValue) => currentMapValue.nodes[nodeId]
+        ? appendMessage(currentMapValue, nodeId, { ...assistantMessage, content: answer, state: "complete" })
+        : currentMapValue);
+
+      let latestMap = document.map;
+      let updatedNode = latestMap.nodes[nodeId];
+      if (requestSettings.autoSummarizeNodes && updatedNode) {
+        const summary = await provider.summarizeNode(updatedNode, controller.signal, profile);
         controller.signal.throwIfAborted();
-        latestMap = currentMap();
-        if (!latestMap) return;
-        this.commitMap(updateNode(latestMap, nodeId, { summary }));
+        if (!currentMap()) return;
+        document.commit((currentMapValue) => {
+          const currentNode = currentMapValue.nodes[nodeId];
+          return currentNode && !currentNode.summaryEditedByUser
+            ? updateNode(currentMapValue, nodeId, { summary, summaryEditedByUser: false })
+            : currentMapValue;
+        });
       }
 
-      latestMap = currentMap();
-      if (!latestMap) return;
-      const titleNode = latestMap.nodes[nodeId];
-      if (titleNode && this.shouldAutoTitle(titleNode, latestMap)) {
+      latestMap = document.map;
+      updatedNode = latestMap.nodes[nodeId];
+      if (updatedNode && this.shouldAutoTitle(updatedNode, latestMap, requestSettings.language)) {
         try {
-          const title = this.normalizeGeneratedTitle(await provider.titleNode(titleNode, controller.signal));
-          latestMap = currentMap();
-          const currentNode = latestMap?.nodes[nodeId];
-          if (title && !controller.signal.aborted && latestMap && currentNode?.title === titleNode.title) {
-            let nextMap = updateNode(latestMap, nodeId, { title });
-            if (nodeId === nextMap.rootNodeId) {
-              nextMap = updateMapTitle(nextMap, title);
-            }
-            this.commitMap(nextMap);
+          const titleNode = updatedNode;
+          const title = this.normalizeGeneratedTitle(await provider.titleNode(titleNode, controller.signal, profile));
+          const liveNode = document.map.nodes[nodeId];
+          if (title && !controller.signal.aborted && liveNode?.title === titleNode.title) {
+            document.commit((currentMapValue) => {
+              const currentNode = currentMapValue.nodes[nodeId];
+              if (!currentNode || currentNode.title !== titleNode.title) return currentMapValue;
+              let nextMap = updateNode(currentMapValue, nodeId, { title });
+              if (nodeId === nextMap.rootNodeId) nextMap = updateMapTitle(nextMap, title);
+              return nextMap;
+            });
           }
         } catch {
           // Naming is helpful, but it should never discard the completed answer.
@@ -721,33 +921,28 @@ export class ViewState {
       }
     } catch (generateError: unknown) {
       if (controller.signal.aborted) {
-        const partial = answer.trim();
+        const partial = requestSettings.streamResponses ? answer.trim() : "";
         const latestMap = currentMap();
         if (partial && latestMap && !latestMap.nodes[nodeId]?.messages.some((message) => message.id === assistantMessage.id)) {
-          this.commitMap(appendMessage(latestMap, nodeId, { ...assistantMessage, content: partial }));
-          new Notice(t(this.plugin.settings.language, "generationStoppedWithPartial"));
+          document.commit((currentMapValue) => currentMapValue.nodes[nodeId]
+            && !currentMapValue.nodes[nodeId]?.messages.some((message) => message.id === assistantMessage.id)
+            ? appendMessage(currentMapValue, nodeId, { ...assistantMessage, content: partial, state: "stopped" })
+            : currentMapValue);
+          if (this.document === document) new Notice(t(requestSettings.language, "generationStoppedWithPartial"));
         }
       } else if (currentMap()) {
-        this.reportError(generateError);
+        document.setGenerationError(nodeId, generateError, profile.id);
+        if (this.document === document) this.reportError(generateError);
       }
     } finally {
       clearTimeout(streamUpdateTimer);
-      if (this.state.streamingMessages[nodeId]?.id === assistantMessage.id) {
-        const streamingMessages = { ...this.state.streamingMessages };
-        delete streamingMessages[nodeId];
-        this.setState({
-          streamingMessages,
-          pendingNodeId: this.state.pendingNodeId === nodeId ? null : this.state.pendingNodeId,
-        });
-      }
-      if (this.abortController === controller) this.abortController = null;
+      const liveStream = document.getSnapshot().streamingMessages[nodeId];
+      if (liveStream?.id === assistantMessage.id) document.setStreamingMessage(nodeId, null);
     }
   }
 
-  private shouldAutoTitle(node: ChatNode, map: ChatMap): boolean {
-    const language = this.plugin.settings.language;
+  private shouldAutoTitle(node: ChatNode, map: ChatMap, language = this.plugin.settings.language): boolean {
     const cleanTitle = cleanText(node.title);
-    const anchorTitle = node.anchorText ? truncateText(cleanText(node.anchorText), 72) : undefined;
     const defaultTitles = new Set([
       t(language, "rootQuestionTitle"),
       t(language, "untitledQuestionTitle"),
@@ -761,29 +956,37 @@ export class ViewState {
       return defaultTitles.has(cleanTitle) || map.title === t(language, "defaultMapTitle") || map.title === "Untitled chat map" || map.title === "未命名对话图谱";
     }
 
-    return defaultTitles.has(cleanTitle) || Boolean(anchorTitle && cleanTitle === anchorTitle);
+    // A selected passage supplies the child's title. An answer must not rename it.
+    return !node.anchorText?.trim() && defaultTitles.has(cleanTitle);
   }
 
   private async prepareMapForExport(map: ChatMap): Promise<ChatMap> {
+    const document = this.document;
     const root = map.nodes[map.rootNodeId];
-    if (!root || root.messages.length === 0 || !this.plugin.settings.apiKey || !this.plugin.settings.model || !this.shouldAutoTitle(root, map)) {
+    if (!root || root.messages.length === 0 || !this.shouldAutoTitle(root, map)) {
       return map;
     }
 
     try {
+      const answerProfileId = [...root.messages].reverse().find((message) => message.role === "assistant")?.modelSnapshot?.profileId;
+      const resolved = await this.resolveProfile(answerProfileId ?? root.defaultModelProfileId);
+      if (resolved.fellBack) this.noticeProfileFallback();
+      if (this.getMissingProfileConfiguration(resolved.profile)) return map;
       const provider = new OpenAICompatibleProvider(this.plugin.settings);
       const controller = new AbortController();
-      const title = this.normalizeGeneratedTitle(await provider.titleNode(root, controller.signal));
+      const title = this.normalizeGeneratedTitle(await provider.titleNode(root, controller.signal, resolved.profile));
       if (!title) {
         return map;
       }
 
-      const currentMap = this.state.map;
-      if (currentMap?.id !== map.id || !currentMap.nodes[root.id]) return map;
+      const currentMap = document?.map;
+      if (!document?.isValid || currentMap?.id !== map.id || !currentMap.nodes[root.id]) return map;
       if (currentMap.nodes[root.id]?.title !== root.title) return currentMap;
-      const titledMap = updateMapTitle(updateNode(currentMap, root.id, { title }), title);
-      this.commitMap(titledMap);
-      return titledMap;
+      document.commit((latestMap) => {
+        if (latestMap.id !== map.id || latestMap.nodes[root.id]?.title !== root.title) return latestMap;
+        return updateMapTitle(updateNode(latestMap, root.id, { title }), title);
+      });
+      return document.map;
     } catch {
       return map;
     }
@@ -829,10 +1032,25 @@ export class ViewState {
   }
 
   private setState(patch: Partial<BranchChatMapState>): void {
-    this.state = {
+    let nextState: BranchChatMapState = {
       ...this.state,
       ...patch,
     };
+    if (this.document) {
+      const snapshot = this.document.getSnapshot();
+      const activeJob = nextState.activeNodeId ? snapshot.generationJobs[nextState.activeNodeId] : undefined;
+      nextState = {
+        ...nextState,
+        map: snapshot.map,
+        generationJobs: snapshot.generationJobs,
+        generationQueue: snapshot.generationQueue,
+        streamingMessages: snapshot.streamingMessages,
+        pendingNodeId: activeJob && (activeJob.status === "queued" || activeJob.status === "running")
+          ? activeJob.nodeId
+          : null,
+      };
+    }
+    this.state = nextState;
     this.emit();
   }
 

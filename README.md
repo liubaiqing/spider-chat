@@ -30,9 +30,24 @@ An Obsidian plugin that turns ChatGPT / Claude / DeepSeek / any OpenAI-compatibl
 ## ⚡ 30-Second Quick Start
 
 1. **Install**: Settings → Community plugins → Browse → search `Spider` → Install → Enable
-2. **Configure your API key**: Settings → Spider → fill in `apiBaseUrl` + `apiKey` + `model` (any OpenAI-compatible endpoint)
+2. **Configure a model profile**: Settings → Spider → set the default profile's API URL, key, and model (any OpenAI-compatible endpoint)
 3. **Create your first map**: Click the Spider ribbon icon (or run command `Spider: New Spider map`) → start chatting
 4. **Try Tab-branching**: Select any text in an AI response, press `Tab` — that's it
+
+---
+
+## Advanced branching workflow
+
+The graph and chat sidebar remain the live workspace. The ordinary select-text → `Tab` flow still creates one child immediately; advanced actions are available separately:
+
+- **Model profiles**: keep several OpenAI-compatible model configurations. A child inherits its parent's default profile, and an individual reply can use another profile. Assistant messages record the model and profile label used at generation time.
+- **Batch branches**: create up to five directions from one node, with a direction and model choice for each. Generation runs through a plugin-wide queue (three requests at once by default; configurable from one to five).
+- **Context control**: choose no added context, a compact parent summary (the default), ancestor history, or the whole map. A one-request override does not change the default.
+- **Reference merge**: create a summary child that cites other nodes without changing the graph's parent-child structure. References retain a title snapshot if the source is deleted.
+- **Replay**: browse the existing conversation by time, depth, or breadth, with pause, step, and speed controls. Replay shows the current map's surviving messages; it does not reconstruct deleted edits or token-by-token generation.
+- **Standalone HTML export**: export an offline, searchable map with replay and theme controls. The existing Markdown / Canvas / SVG export package keeps its file layout.
+
+Existing Spider maps and single-model settings load through migration. This workflow does not use Obsidian's native Canvas as the live chat surface and does not import Canvas Branch Chat `.canvas` conversations.
 
 ---
 
@@ -84,8 +99,7 @@ Spider Maps/
 
 ### 🔐 Privacy & Network Disclosure
 - The plugin **requires network** to call AI, but **you fully control which endpoint**
-- **API key stays local** (Obsidian's plugin data.json); never uploaded
-- **Never reads unrelated vault notes** — AI requests only include the current branch plus the context options you enable
+- **API keys stay local** in Obsidian plugin settings or a selected `.env` source; requests send the key only to the endpoint you configure
 - **Maps are 100% local**: stored as `.spider/maps/*.json`, syncable via Obsidian Sync
 - **Offline-capable**: knowledge graph, navigation, export, history — everything works offline. Only "send message" needs network.
 
@@ -113,12 +127,12 @@ Spider follows Obsidian's language on first install. You can switch between Chin
 
 | Setting | Description | Default |
 |---|---|---|
-| API Base URL | OpenAI-compatible endpoint | `https://api.openai.com/v1` |
-| API Key | Your API key (password input, stored locally) | — |
-| Model | Any model name your endpoint supports | `gpt-4o-mini` |
+| Model profiles | Alias, model, API root or full completion URL, key or `.env` key name, optional prompt and generation parameters | One migrated default profile |
+| Default model profile | Profile inherited by new branches | Default profile |
+| Context mode | None / compact parent / ancestors / whole map | Compact parent |
+| Context limits | Older answer truncation and total context length | Configurable |
+| Concurrent generations | Plugin-wide request limit | 3 (range 1–5) |
 | Interface Language | Chinese / English | Follows Obsidian |
-| Include parent context | Send parent title/summary/anchor with child requests | ✅ on |
-| Include full context | Also send other map branches as reference (more tokens) | ❌ off |
 | Stream responses | Stream tokens as they arrive | ✅ on |
 | Tab to create child nodes | Enable the Tab shortcut | ✅ on |
 | Auto-summarize nodes | AI auto-summarizes each node | ❌ off |
@@ -130,7 +144,7 @@ Spider follows Obsidian's language on first install. You can switch between Chin
 
 ### From Community Plugins (recommended)
 
-Open **Settings → Community plugins → Browse**, search for `Spider`, then select **Install → Enable**. Configure your API key and model under **Settings → Spider**.
+Open **Settings → Community plugins → Browse**, search for `Spider`, then select **Install → Enable**. Configure a default model profile under **Settings → Spider**.
 
 ### From GitHub Release (manual installation)
 1. Download `main.js`, `manifest.json`, and `styles.css` from the latest [release](https://github.com/111pointer111/spider/releases/latest)
@@ -168,11 +182,11 @@ npm run link       # symlink build output into your vault
 
 ```
 src/
-  ai/          OpenAI-compatible API provider (streaming + sync + summarize)
+  ai/          OpenAI-compatible provider, profile keys, and context builder
   domain/      ChatMap immutable factories + tree ops + guards + Dagre layout
-  export/      Markdown / Mermaid / Canvas / SVG / JSON exporters
-  state/       Multi-view session store + per-session ViewState
-  storage/     Vault JSON persistence (backward-compatible with old directory)
+  export/      Markdown / Mermaid / Canvas / SVG / JSON and standalone HTML exporters
+  state/       Shared per-map document and request scheduler + per-view UI state
+  storage/     Vault JSON persistence with stable map ID paths and legacy migration
   ui/          React components (graph, chat panel, gallery, modals)
   utils/       ID generation, path handling, activeDocument shim
 tests/         vitest unit tests (domain + export + AI layers)

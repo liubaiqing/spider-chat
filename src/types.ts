@@ -5,12 +5,41 @@ export type ChatMapId = string;
 export type ChatRole = "system" | "user" | "assistant";
 export type ChatNodeStatus = "open" | "understood" | "archived";
 export type AppLanguage = "zh-CN" | "en";
+export type ContextMode = "none" | "parent" | "ancestors" | "whole";
+
+export interface ModelProfile {
+  id: string;
+  alias: string;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  apiKeyEnvVar?: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  color?: string;
+  icon?: string;
+}
+
+export interface ModelSnapshot {
+  profileId: string;
+  alias: string;
+  model: string;
+}
+
+export interface MergeSourceRef {
+  nodeId: NodeId;
+  messageId?: MessageId;
+  titleSnapshot: string;
+}
 
 export interface ChatMessage {
   id: MessageId;
   role: ChatRole;
   content: string;
   createdAt: string;
+  modelSnapshot?: ModelSnapshot;
+  state?: "complete" | "stopped";
 }
 
 /** UTF-16 offsets within a rendered message body; end is exclusive. */
@@ -29,6 +58,7 @@ export interface ChatNode {
   sourceTextRange?: { start: number; end: number };
   messages: ChatMessage[];
   summary?: string;
+  summaryEditedByUser?: boolean;
   note?: string;
   status: ChatNodeStatus;
   position: {
@@ -38,6 +68,10 @@ export interface ChatNode {
   children: NodeId[];
   createdAt: string;
   updatedAt: string;
+  defaultModelProfileId?: string;
+  branchDirection?: string;
+  branchColor?: string;
+  mergeSources?: MergeSourceRef[];
 }
 
 export interface ChatEdge {
@@ -69,6 +103,13 @@ export interface BranchChatMapSettings {
   streamResponses: boolean;
   onboardingCardDismissed: boolean;
   lastOpenedMapId?: string;
+  models?: ModelProfile[];
+  defaultModelProfileId?: string;
+  contextMode?: ContextMode;
+  contextRecentFull?: number;
+  contextTruncateChars?: number;
+  maxContextChars?: number;
+  maxConcurrentGenerations?: number;
 }
 
 export interface AiChatRequest {
@@ -78,6 +119,9 @@ export interface AiChatRequest {
   model: string;
   includeParentContext: boolean;
   signal?: AbortSignal;
+  profile?: ModelProfile;
+  contextMode?: ContextMode;
+  systemPromptOverride?: string;
 }
 
 export interface AiProvider {

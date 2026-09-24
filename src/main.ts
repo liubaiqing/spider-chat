@@ -1,7 +1,7 @@
-import { getLanguage, Plugin, WorkspaceLeaf, type Command, type Editor } from "obsidian";
+import { getLanguage, Platform, Plugin, WorkspaceLeaf, type Command, type Editor } from "obsidian";
 import { BranchChatMapSettingTab } from "./settings";
-import { createDefaultSettings, DEFAULT_SETTINGS } from "./settingsDefaults";
-import type { BranchChatMapSettings } from "./types";
+import { DEFAULT_SETTINGS, normalizeSettings, normalizeApiBaseUrl } from "./settingsDefaults";
+import type { BranchChatMapSettings, ModelProfile } from "./types";
 import {
   LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP,
   LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP_CHAT,
@@ -16,6 +16,7 @@ import { MapSwitcherModal } from "./ui/MapSwitcherModal";
 import { createRootMap } from "./domain/chatMap";
 import { applyDagreLayout } from "./domain/layout";
 import { updateLocalizedChrome, type LocalizedCommand } from "./localizedChrome";
+import { resolveProfileApiKey } from "./ai/profileKeys";
 
 export default class BranchChatMapPlugin extends Plugin {
   settings: BranchChatMapSettings = DEFAULT_SETTINGS;
@@ -119,6 +120,7 @@ export default class BranchChatMapPlugin extends Plugin {
       this.detachLegacyViews();
       void this.ensureMainTabView(false).then((leaf) => {
         if (leaf) {
+          if (leaf.view instanceof BranchChatMapView) leaf.view.activateSession();
           void this.ensureChatSidebarView(true);
         }
       });
@@ -130,11 +132,8 @@ export default class BranchChatMapPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const defaults = createDefaultSettings(getLanguage());
-    this.settings = {
-      ...defaults,
-      ...((await this.loadData()) as Partial<BranchChatMapSettings> | null),
-    };
+    const saved = (await this.loadData()) as Partial<BranchChatMapSettings> | null;
+    this.settings = normalizeSettings(saved, getLanguage());
   }
 
   async saveSettings(): Promise<void> {
@@ -143,7 +142,25 @@ export default class BranchChatMapPlugin extends Plugin {
 
   async updateSettings(patch: Partial<BranchChatMapSettings>): Promise<void> {
     const previous = this.settings;
-    this.settings = { ...previous, ...patch };
+    let next: Partial<BranchChatMapSettings> = { ...previous, ...patch };
+    const legacyAiFieldsChanged = "apiBaseUrl" in patch || "apiKey" in patch || "model" in patch;
+    if (legacyAiFieldsChanged && !patch.models) {
+      const profiles = previous.models ?? [];
+      const defaultId = previous.defaultModelProfileId;
+      const profileIndex = profiles.findIndex((profile) => profile.id === defaultId);
+      if (profileIndex >= 0) {
+        const updated = profiles.map((profile, index) => index === profileIndex
+          ? {
+              ...profile,
+              baseUrl: "apiBaseUrl" in patch ? normalizeApiBaseUrl(patch.apiBaseUrl ?? "") : profile.baseUrl,
+              apiKey: "apiKey" in patch ? patch.apiKey ?? "" : profile.apiKey,
+              model: "model" in patch ? patch.model ?? "" : profile.model,
+            }
+          : profile);
+        next = { ...next, models: updated };
+      }
+    }
+    this.settings = normalizeSettings(next, next.language ?? previous.language);
     try {
       await this.saveSettings();
     } catch (error: unknown) {
@@ -154,10 +171,53 @@ export default class BranchChatMapPlugin extends Plugin {
     this.settingsStore.notify();
   }
 
+  /** Select a profile, falling back to the configured default when its id is missing. */
+  async resolveProfileForRequest(id?: string): Promise<{ profile: ModelProfile; fellBack: boolean }> {
+    const profiles = this.settings.models ?? [];
+    const requestedId = id?.trim();
+    const requested = requestedId ? profiles.find((profile) => profile.id === requestedId) : undefined;
+    const defaultProfile = profiles.find((profile) => profile.id === this.settings.defaultModelProfileId);
+    const profile = defaultProfile ?? profiles[0] ?? {
+      id: "default",
+      alias: "Default",
+      model: this.settings.model,
+      baseUrl: this.settings.apiBaseUrl,
+      apiKey: this.settings.apiKey,
+    };
+    const selected = requested ?? profile;
+    const resolvedSelected = { ...selected, apiKey: await this.resolveProfileApiKey(selected) };
+    const invalidRequested = Boolean(requested && requested.id !== profile.id && !isProfileReady(resolvedSelected));
+    const unknownRequested = Boolean(requestedId && !requested);
+
+    if ((invalidRequested || unknownRequested) && requested?.id !== profile.id) {
+      return {
+        profile: { ...profile, apiKey: await this.resolveProfileApiKey(profile) },
+        fellBack: true,
+      };
+    }
+
+    return {
+      profile: resolvedSelected,
+      fellBack: false,
+    };
+  }
+
+  private async resolveProfileApiKey(profile: ModelProfile): Promise<string> {
+    const adapter = this.app.vault?.adapter;
+    const pluginDir = (this.manifest.dir ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+    return resolveProfileApiKey(profile, {
+      pluginEnvPath: pluginDir ? `${pluginDir}/.env` : ".env",
+      isDesktop: Platform.isDesktop,
+      isMobile: Platform.isMobile,
+      readFile: adapter ? (path) => adapter.read(path) : undefined,
+    });
+  }
+
   async activateView(): Promise<void> {
     const leaf = await this.ensureMainTabView(true);
     if (leaf) {
       await this.app.workspace.revealLeaf(leaf);
+      if (leaf.view instanceof BranchChatMapView) leaf.view.activateSession();
     }
     await this.ensureChatSidebarView(true);
   }
@@ -175,6 +235,7 @@ export default class BranchChatMapPlugin extends Plugin {
       active: true,
     });
     await this.app.workspace.revealLeaf(leaf);
+    if (leaf.view instanceof BranchChatMapView) leaf.view.activateSession();
 
     await this.ensureChatSidebarView(true);
   }
@@ -289,4 +350,8 @@ export default class BranchChatMapPlugin extends Plugin {
 
     return false;
   }
+}
+
+function isProfileReady(profile: ModelProfile): boolean {
+  return Boolean(profile.baseUrl.trim() && profile.model.trim() && profile.apiKey.trim());
 }

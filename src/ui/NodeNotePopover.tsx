@@ -9,13 +9,17 @@ type SaveState = "idle" | "saving" | "saved";
 interface NodeNotePopoverProps {
   nodeId: NodeId;
   note?: string;
+  summary?: string;
   language: AppLanguage;
   pinned: boolean;
   preferLeft?: boolean;
   onActivate(this: void, nodeId: NodeId): void;
   onPinnedChange(this: void, nodeId: NodeId | null): void;
   onNoteChange(this: void, nodeId: NodeId, note: string): void;
+  onSummaryChange(this: void, nodeId: NodeId, summary: string): void;
 }
+
+type EditMode = "note" | "summary";
 
 const NOTE_PANEL_WIDTH = 288;
 const NOTE_PANEL_GAP = 20;
@@ -35,20 +39,26 @@ function NoteIcon(): ReactElement {
 export function NodeNotePopover({
   nodeId,
   note,
+  summary,
   language,
   pinned,
   preferLeft = false,
   onActivate,
   onPinnedChange,
   onNoteChange,
+  onSummaryChange,
 }: NodeNotePopoverProps): ReactElement {
   const [hovered, setHovered] = useState(false);
-  const [draft, setDraft] = useState(note ?? "");
+  const initialMode: EditMode = note?.trim() ? "note" : summary?.trim() ? "summary" : "note";
+  const [mode, setMode] = useState<EditMode>(initialMode);
+  const [draft, setDraft] = useState(initialMode === "summary" ? summary ?? "" : note ?? "");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const hoverTimerRef = useRef<number | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-  const draftRef = useRef(note ?? "");
-  const savedValueRef = useRef(note ?? "");
+  const modeRef = useRef<EditMode>(initialMode);
+  const valuesRef = useRef({ note: note ?? "", summary: summary ?? "" });
+  const draftRef = useRef(initialMode === "summary" ? summary ?? "" : note ?? "");
+  const savedValueRef = useRef(draftRef.current);
   const dirtyRef = useRef(false);
   const wasPinnedRef = useRef(pinned);
 
@@ -105,12 +115,26 @@ export function NodeNotePopover({
 
     const normalized = value.trim() ? value.trimEnd() : "";
     if (normalized !== savedValueRef.current) {
-      onNoteChange(nodeId, normalized);
+      valuesRef.current[modeRef.current] = normalized;
+      if (modeRef.current === "summary") onSummaryChange(nodeId, normalized);
+      else onNoteChange(nodeId, normalized);
       savedValueRef.current = normalized;
     }
     dirtyRef.current = false;
     setSaveState("saved");
-  }, [nodeId, onNoteChange]);
+  }, [nodeId, onNoteChange, onSummaryChange]);
+
+  const switchMode = useCallback((nextMode: EditMode) => {
+    if (modeRef.current === nextMode) return;
+    if (dirtyRef.current) persistDraft(draftRef.current);
+    modeRef.current = nextMode;
+    const nextValue = valuesRef.current[nextMode];
+    draftRef.current = nextValue;
+    savedValueRef.current = nextValue;
+    setDraft(nextValue);
+    setMode(nextMode);
+    setSaveState("idle");
+  }, [persistDraft]);
 
   const handleDraftChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     const value = event.currentTarget.value;
@@ -155,14 +179,21 @@ export function NodeNotePopover({
   }, [handleClose, persistDraft]);
 
   useEffect(() => {
-    if (!dirtyRef.current && (note ?? "") !== savedValueRef.current) {
-      const nextNote = note ?? "";
-      setDraft(nextNote);
-      draftRef.current = nextNote;
-      savedValueRef.current = nextNote;
+    if (!dirtyRef.current || modeRef.current !== "note") valuesRef.current.note = note ?? "";
+    if (!dirtyRef.current || modeRef.current !== "summary") valuesRef.current.summary = summary ?? "";
+    if (dirtyRef.current) return;
+    if (modeRef.current === "note" && !note?.trim() && summary?.trim() && !pinned) {
+      modeRef.current = "summary";
+      setMode("summary");
+    }
+    const nextValue = valuesRef.current[modeRef.current];
+    if (nextValue !== savedValueRef.current) {
+      setDraft(nextValue);
+      draftRef.current = nextValue;
+      savedValueRef.current = nextValue;
       setSaveState("idle");
     }
-  }, [note]);
+  }, [note, pinned, summary]);
 
   useEffect(() => {
     if (wasPinnedRef.current && !pinned && dirtyRef.current) {
@@ -179,21 +210,22 @@ export function NodeNotePopover({
       }
       if (dirtyRef.current) {
         const normalized = draftRef.current.trim() ? draftRef.current.trimEnd() : "";
-        onNoteChange(nodeId, normalized);
+        if (modeRef.current === "summary") onSummaryChange(nodeId, normalized);
+        else onNoteChange(nodeId, normalized);
       }
     };
-  }, [clearHoverTimer, nodeId, onNoteChange]);
+  }, [clearHoverTimer, nodeId, onNoteChange, onSummaryChange]);
 
-  const hasNote = Boolean(note?.trim() || draft.trim());
-  const preview = hasNote ? truncateText(markdownToPlainText(draft || note || ""), 180) : t(language, "nodeNoteEmpty");
+  const hasContent = Boolean(note?.trim() || summary?.trim() || draft.trim());
+  const preview = hasContent ? truncateText(markdownToPlainText(note?.trim() || summary?.trim() || draft), 180) : t(language, "nodeNoteEmpty");
   const isVisible = pinned || hovered;
 
   return (
     <>
       <button
-        className={`bcm-node-note-trigger nodrag ${hasNote ? "has-note" : ""} ${pinned ? "is-pinned" : ""}`}
+        className={`bcm-node-note-trigger nodrag ${hasContent ? "has-note" : ""} ${pinned ? "is-pinned" : ""}`}
         type="button"
-        aria-label={t(language, hasNote ? "editNodeNote" : "addNodeNote")}
+        aria-label={t(language, note?.trim() ? "editNodeNote" : summary?.trim() ? "editNodeSummary" : "addNodeNote")}
         aria-expanded={isVisible}
         onClick={(event) => {
           event.stopPropagation();
@@ -216,14 +248,14 @@ export function NodeNotePopover({
       >
         <section
           className={`bcm-node-note-popover nodrag nopan nowheel ${pinned ? "is-pinned" : "is-preview"}`}
-          aria-label={t(language, "nodeNote")}
+          aria-label={t(language, mode === "summary" ? "summary" : "nodeNote")}
           onClick={(event) => event.stopPropagation()}
           onMouseEnter={openHoverPreview}
           onMouseLeave={scheduleHoverClose}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <header className="bcm-node-note-header">
-            <span>{t(language, "nodeNote")}</span>
+            <span>{t(language, mode === "summary" ? "summary" : "nodeNote")}</span>
             {pinned ? (
               <button
                 className="bcm-node-note-close"
@@ -239,12 +271,16 @@ export function NodeNotePopover({
 
           {pinned ? (
             <>
+              <div className="bcm-node-note-tabs" role="group" aria-label={t(language, "details")}>
+                <button type="button" aria-pressed={mode === "summary"} onClick={() => switchMode("summary")}>{t(language, "summary")}</button>
+                <button type="button" aria-pressed={mode === "note"} onClick={() => switchMode("note")}>{t(language, "nodeNote")}</button>
+              </div>
               <textarea
                 autoFocus
                 className="bcm-node-note-editor nodrag nopan nowheel"
                 data-spider-note-editor="true"
                 value={draft}
-                placeholder={t(language, "nodeNotePlaceholder")}
+                placeholder={t(language, mode === "summary" ? "summaryPlaceholder" : "nodeNotePlaceholder")}
                 onChange={handleDraftChange}
                 onKeyDown={handleEditorKeyDown}
               />

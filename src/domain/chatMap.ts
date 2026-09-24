@@ -1,5 +1,5 @@
 import { DEFAULT_MAP_TITLE, UNTITLED_NODE_TITLE } from "../constants";
-import type { BranchSource, ChatMap, ChatMessage, ChatNode, NodeId } from "../types";
+import type { BranchSource, ChatMap, ChatMessage, ChatNode, MergeSourceRef, NodeId } from "../types";
 import { createId, nowIso } from "../utils/id";
 import { cleanText, truncateText } from "../utils/text";
 
@@ -33,6 +33,10 @@ export function createNode(input: {
   source?: BranchSource;
   position?: { x: number; y: number };
   messages?: ChatMessage[];
+  defaultModelProfileId?: string;
+  branchDirection?: string;
+  branchColor?: string;
+  mergeSources?: MergeSourceRef[];
 }): ChatNode {
   const createdAt = nowIso();
   const anchorTitle = input.anchorText ? truncateText(input.anchorText, 72) : undefined;
@@ -50,6 +54,10 @@ export function createNode(input: {
     children: [],
     createdAt,
     updatedAt: createdAt,
+    defaultModelProfileId: input.defaultModelProfileId,
+    branchDirection: input.branchDirection,
+    branchColor: input.branchColor,
+    mergeSources: input.mergeSources,
   };
 }
 
@@ -69,6 +77,10 @@ export function addChildNode(
     anchorText?: string;
     source?: BranchSource;
     title?: string;
+    defaultModelProfileId?: string;
+    branchDirection?: string;
+    branchColor?: string;
+    mergeSources?: MergeSourceRef[];
   } = {},
 ): { map: ChatMap; child: ChatNode } {
   const parent = map.nodes[parentId];
@@ -82,6 +94,10 @@ export function addChildNode(
     title: options.title,
     anchorText: options.anchorText,
     source: options.source,
+    defaultModelProfileId: options.defaultModelProfileId ?? parent.defaultModelProfileId,
+    branchDirection: options.branchDirection,
+    branchColor: options.branchColor ?? parent.branchColor,
+    mergeSources: options.mergeSources,
     position: {
       x: parent.position.x + 360,
       y: parent.position.y + siblingIndex * 180 - Math.max(0, parent.children.length - 1) * 70,

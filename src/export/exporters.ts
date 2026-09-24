@@ -1,4 +1,4 @@
-import type { AppLanguage, ChatMap, ChatMessage, ChatNode } from "../types";
+import type { AppLanguage, ChatMap, ChatMessage, ChatNode, ModelProfile } from "../types";
 import { cleanText, escapeMermaid, markdownToPlainText, slugifyFileName } from "../utils/text";
 import { renderGraphSvg } from "./graphSvg";
 
@@ -53,6 +53,7 @@ export interface ExportFile {
 export interface ExportCanvasOptions {
   exportFolder?: string;
   language?: AppLanguage;
+  modelProfiles?: ModelProfile[];
 }
 
 export type BuildExportFilesOptions = ExportCanvasOptions;
@@ -75,6 +76,7 @@ interface ExportLabels {
   answerExcerpt: string;
   anchor: string;
   archived: string;
+  branchDirection: string;
   canvasCard: string;
   canvasView: string;
   childNodes: string;
@@ -100,6 +102,9 @@ interface ExportLabels {
   mermaid: string;
   mermaidPreview: string;
   mermaidTitleSuffix: string;
+  missingSource: string;
+  mergeSource: string;
+  model: string;
   missingRoot: string;
   navigation: string;
   noChildren: string;
@@ -116,6 +121,8 @@ interface ExportLabels {
   overview: string;
   parent: string;
   personalNote: string;
+  sourceNode: string;
+  sourceMessage: string;
   question: string;
   quickInfo: string;
   rawData: string;
@@ -138,6 +145,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       answerExcerpt: "Answer excerpt",
       anchor: "Anchor",
       archived: "Archived",
+      branchDirection: "Direction",
       canvasCard: "Canvas card",
       canvasView: "Canvas view",
       childNodes: "Child nodes",
@@ -163,6 +171,9 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       mermaid: "Mermaid map",
       mermaidPreview: "Mermaid preview",
       mermaidTitleSuffix: "mindmap",
+      missingSource: "missing source",
+      mergeSource: "Merge source",
+      model: "Model",
       missingRoot: "No root node found.",
       navigation: "Navigation",
       noChildren: "No child nodes",
@@ -179,6 +190,8 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       overview: "Overview",
       parent: "Parent",
       personalNote: "My note",
+      sourceNode: "Source branch",
+      sourceMessage: "Source message",
       question: "Question",
       quickInfo: "Quick info",
       rawData: "Raw data",
@@ -200,6 +213,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     answerExcerpt: "回答节选",
     anchor: "原文锚点",
     archived: "已归档",
+    branchDirection: "探索方向",
     canvasCard: "Canvas 卡片",
     canvasView: "Canvas 视图",
     childNodes: "子问题",
@@ -225,6 +239,9 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     mermaid: "Mermaid 图",
     mermaidPreview: "Mermaid 预览",
     mermaidTitleSuffix: "思维导图",
+    missingSource: "来源已删除",
+    mergeSource: "合并来源",
+    model: "模型",
     missingRoot: "缺少根节点",
     navigation: "导航",
     noChildren: "暂无",
@@ -241,6 +258,8 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     overview: "总览",
     parent: "父节点",
     personalNote: "我的笔记",
+    sourceNode: "原始分支",
+    sourceMessage: "原始消息",
     question: "问题",
     quickInfo: "快速信息",
     rawData: "原始数据",
@@ -374,6 +393,20 @@ function nodeStatusLabel(node: ChatNode, labels: ExportLabels): string {
   return labels.open;
 }
 
+function nodeModelLabel(node: ChatNode, profiles: readonly ModelProfile[] = []): string | undefined {
+  const response = [...node.messages].reverse().find((message) => message.role === "assistant" && message.modelSnapshot);
+  if (response?.modelSnapshot) {
+    return response.modelSnapshot.alias || response.modelSnapshot.model;
+  }
+
+  const profile = profiles.find((candidate) => candidate.id === node.defaultModelProfileId);
+  return profile?.alias || profile?.model || node.defaultModelProfileId;
+}
+
+function markdownText(value: string): string {
+  return value.replace(/[\\\x60*_{}\[\]()#+.!|>~-]/g, "\\$&").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function nodeCanvasColor(node: ChatNode, isRoot: boolean): CanvasColor {
   if (isRoot) {
     return "6";
@@ -403,7 +436,7 @@ function canvasPlainText(value: string): string {
   return value.replace(/[\\`*_[\]<>#~]/g, "\\$&");
 }
 
-function graphCardContent(node: ChatNode, labels: ExportLabels) {
+function graphCardContent(node: ChatNode, labels: ExportLabels, modelProfiles: readonly ModelProfile[] = []) {
   const answer = node.messages.filter((message) => message.role === "assistant" && message.content.trim()).at(-1);
   const preview = node.note?.trim() || node.summary?.trim() || answer?.content || firstUserQuestion(node) || node.anchorText?.trim();
   const previewLabel = node.note?.trim() ? labels.personalNote
@@ -413,18 +446,31 @@ function graphCardContent(node: ChatNode, labels: ExportLabels) {
   return {
     title: cleanText(node.title),
     statusLabel: nodeStatusLabel(node, labels),
+    direction: node.branchDirection?.trim() ?? "",
+    model: nodeModelLabel(node, modelProfiles) ?? "",
     previewLabel: preview ? previewLabel : "",
     preview: preview ? truncateForExport(markdownToPlainText(preview), 100) : labels.noConversation,
   };
 }
 
-function canvasCardText(node: ChatNode, labels: ExportLabels, filePath: string): string {
-  const content = graphCardContent(node, labels);
+function canvasCardText(map: ChatMap, node: ChatNode, labels: ExportLabels, filePath: string, modelProfiles: readonly ModelProfile[] = []): string {
+  const content = graphCardContent(node, labels, modelProfiles);
+  const parent = node.parentId ? map.nodes[node.parentId] : undefined;
+  const mergeSourceLabels = (node.mergeSources ?? []).map((source) => {
+    const target = map.nodes[source.nodeId];
+    return target
+      ? canvasPlainText(target.title)
+      : canvasPlainText(source.titleSnapshot) + " (" + labels.missingSource + ")";
+  });
   return [
     `### ${canvasPlainText(truncateForExport(content.title, 40))}`,
     "",
     content.statusLabel,
     "",
+    ...(content.direction ? ["**" + labels.branchDirection + "**: " + canvasPlainText(content.direction), ""] : []),
+    ...(content.model ? ["**" + labels.model + "**: " + canvasPlainText(content.model), ""] : []),
+    ...(parent && node.sourceMessageId ? ["**" + labels.sourceNode + "**: " + canvasPlainText(parent.title), ""] : []),
+    ...(mergeSourceLabels.length > 0 ? ["**" + labels.mergeSource + "**: " + mergeSourceLabels.join(", "), ""] : []),
     ...(content.previewLabel ? [`**${content.previewLabel}**`, ""] : []),
     canvasPlainText(content.preview),
     "",
@@ -506,6 +552,7 @@ function renderMessage(message: ChatMessage, labels: ExportLabels): string[] {
   const body = message.content.trim();
 
   return [
+    ...(message.modelSnapshot ? ["> " + labels.model + ": " + markdownText(message.modelSnapshot.alias || message.modelSnapshot.model)] : []),
     `> [!${calloutType}] ${roleName(message.role, labels)} · ${formatDateTime(message.createdAt)}`,
     ...(body ? body.split(/\r?\n/).map((line) => `> ${line}`) : [">"]),
     "",
@@ -518,6 +565,7 @@ function renderNodeMarkdown(
   depth: number,
   labels: ExportLabels,
   nodeFileNames?: ReadonlyMap<string, string>,
+  modelProfiles: readonly ModelProfile[] = [],
 ): string {
   const lines: string[] = [];
   const parent = node.parentId ? map.nodes[node.parentId] : undefined;
@@ -538,6 +586,38 @@ function renderNodeMarkdown(
   if (node.anchorText) {
     lines.push(`> ${labels.anchor}: ${node.anchorText}`);
   }
+  const responseModel = nodeModelLabel(node, modelProfiles);
+  const sourceParent = node.sourceMessageId && parent ? parent : undefined;
+  const mergeSources = node.mergeSources ?? [];
+  if (node.branchDirection || responseModel || sourceParent || mergeSources.length > 0) {
+    lines.push("## " + labels.branchDirection);
+    lines.push("");
+    if (node.branchDirection) {
+      lines.push("- " + labels.branchDirection + ": " + markdownText(node.branchDirection));
+    }
+    if (responseModel) {
+      lines.push("- " + labels.model + ": " + markdownText(responseModel));
+    }
+    if (sourceParent) {
+      const sourcePath = nodeFileNames?.get(sourceParent.id);
+      const sourceTitle = sourcePath ? markdownLink(sourceParent.title, sourcePath) : markdownText(sourceParent.title);
+      lines.push("- " + labels.sourceNode + ": " + sourceTitle);
+      lines.push("  - " + labels.sourceMessage + ": " + markdownText(node.sourceMessageId ?? ""));
+      if (node.sourceTextRange) {
+        lines.push("  - " + labels.anchor + ": " + node.sourceTextRange.start + "–" + node.sourceTextRange.end);
+      }
+    }
+    for (const source of mergeSources) {
+      const sourceNode = map.nodes[source.nodeId];
+      const sourcePath = sourceNode ? nodeFileNames?.get(sourceNode.id) : undefined;
+      const sourceLabel = sourceNode
+        ? sourcePath ? markdownLink(sourceNode.title, sourcePath) : markdownText(sourceNode.title)
+        : markdownText(source.titleSnapshot) + " (" + labels.missingSource + ")";
+      lines.push("- " + labels.mergeSource + ": " + sourceLabel);
+    }
+    lines.push("");
+  }
+
   const question = firstUserQuestion(node);
   if (question) {
     lines.push(`> ${labels.question}: ${question}`);
@@ -754,7 +834,7 @@ export function exportCanvas(map: ChatMap, options: ExportCanvasOptions = {}): s
         return {
           id: node.id,
           type: "text" as const,
-          text: canvasCardText(node, labels, canvasNodeFilePath(fileName, options)),
+          text: canvasCardText(map, node, labels, canvasNodeFilePath(fileName, options), options.modelProfiles),
           x: position.x,
           y: position.y,
           width: CANVAS_NODE_WIDTH,
@@ -845,7 +925,7 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     `${labels.nodeCount} ${nodes.length} · ${labels.edgeCount} ${map.edges.length} · ${labels.fullConversationHint}`,
     labels.openFullNote,
     nodes.map((node) => ({
-      ...graphCardContent(node, labels),
+      ...graphCardContent(node, labels, options.modelProfiles),
       id: node.id,
       x: positions.get(node.id)?.x ?? 0,
       y: positions.get(node.id)?.y ?? 0,
@@ -867,7 +947,7 @@ export function buildExportFiles(map: ChatMap, options: BuildExportFilesOptions 
     },
     ...nodes.map((node, index) => ({
       path: `nodes/${nodeFileNames.get(node.id) ?? nodeFileName(index, node)}`,
-      content: renderNodeMarkdown(map, node, 1, labels, nodeFileNames),
+      content: renderNodeMarkdown(map, node, 1, labels, nodeFileNames, options.modelProfiles),
     })),
     {
       path: "map.canvas",

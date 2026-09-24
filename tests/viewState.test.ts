@@ -38,6 +38,42 @@ function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchCh
 }
 
 describe("ViewState", () => {
+  it("keeps a selected-text branch title after the assistant answers", async () => {
+    const map = createRootMap("Topic", "Topic");
+    const vs = createViewState(map, { streamResponses: false });
+    const answer = vi.spyOn(OpenAICompatibleProvider.prototype, "chat").mockResolvedValue("The explanation");
+    const title = vi.spyOn(OpenAICompatibleProvider.prototype, "titleNode").mockResolvedValue("AI answer title");
+    try {
+      vs.createChild("量子纠缠");
+      const childId = vs.getSnapshot().activeNodeId!;
+      expect(vs.getSnapshot().map?.nodes[childId]?.title).toBe("量子纠缠");
+      vs.updateDraft(childId, "请解释量子纠缠");
+      await vs.sendMessage();
+      expect(vs.getSnapshot().map?.nodes[childId]?.title).toBe("量子纠缠");
+      expect(vs.getSnapshot().map?.nodes[childId]?.messages.at(-1)?.content).toBe("The explanation");
+      expect(title).not.toHaveBeenCalled();
+    } finally {
+      answer.mockRestore();
+      title.mockRestore();
+      vs.dispose();
+    }
+  });
+
+  it("keeps next-question options with their node and clears them on deletion or map change", async () => {
+    const root = createRootMap("Options", "Options");
+    const { map, child } = addChildNode(root, root.rootNodeId, { title: "Child" });
+    const vs = createViewState(map);
+    vs.updateSendOptions(child.id, { contextMode: "ancestors", profileId: "model-a" });
+    vs.setActiveNode(root.rootNodeId);
+    expect(vs.getSnapshot().sendOptions[child.id]?.contextMode).toBe("ancestors");
+    expect(vs.getSnapshot().sendOptions[root.rootNodeId]).toBeUndefined();
+    vs.deleteNode(child.id);
+    expect(vs.getSnapshot().sendOptions[child.id]).toBeUndefined();
+    vs.updateSendOptions(root.rootNodeId, { contextMode: "whole" });
+    await vs.createNewRootMap();
+    expect(vs.getSnapshot().sendOptions).toEqual({});
+  });
+
   it("preserves new branches, notes, and status while streaming and generating metadata", async () => {
     let finishStream!: () => void;
     let streamReady!: () => void;
@@ -296,6 +332,38 @@ describe("ViewState", () => {
 
     vs.updateNodeNote(stableMap.rootNodeId, "   ");
     expect(vs.getSnapshot().map?.nodes[stableMap.rootNodeId]?.note).toBeUndefined();
+  });
+
+  it("lets a user edit an AI summary without turning it into a separate note", () => {
+    const map = createRootMap("Summary", "Summary root");
+    const withSummary = updateNode(map, map.rootNodeId, { summary: "AI draft" });
+    const vs = createViewState(withSummary);
+
+    vs.updateNodeSummary(map.rootNodeId, "My revised summary");
+    expect(vs.getSnapshot().map?.nodes[map.rootNodeId]).toMatchObject({
+      summary: "My revised summary",
+      summaryEditedByUser: true,
+    });
+    expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.note).toBeUndefined();
+  });
+
+  it("does not replace a user-edited summary during automatic summarization", async () => {
+    const map = createRootMap("Summary protection", "Named root");
+    const vs = createViewState(map, { autoSummarizeNodes: true });
+    vs.updateNodeSummary(map.rootNodeId, "User conclusion");
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "Assistant answer";
+    });
+    const summarize = vi.spyOn(OpenAICompatibleProvider.prototype, "summarizeNode").mockResolvedValue("New AI summary");
+    try {
+      vs.updateDraft(map.rootNodeId, "Question");
+      await vs.sendMessage();
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.summary).toBe("User conclusion");
+      expect(vs.getSnapshot().map?.nodes[map.rootNodeId]?.summaryEditedByUser).toBe(true);
+    } finally {
+      stream.mockRestore();
+      summarize.mockRestore();
+    }
   });
 
   it("preserves the draft when AI configuration is incomplete", async () => {

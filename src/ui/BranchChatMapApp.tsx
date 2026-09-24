@@ -1,7 +1,7 @@
 import "@xyflow/react/dist/style.css";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Notice } from "obsidian";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from "react";
+import { Menu, Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
 import { confirmDeleteSubtreeLabel, displayTitle, mapStatsLabel, t } from "../i18n";
 import { GraphCanvas } from "./GraphCanvas";
@@ -13,6 +13,9 @@ import type { ViewState } from "../state/viewState";
 import type { ChatMapId, NodeId } from "../types";
 import { getSelectionInside, shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 import { SearchResultItem } from "./SearchResultItem";
+import { writeInteractiveHtmlExport } from "./exportInteractiveHtml";
+import { NodeSendOptionsModal } from "./NodeSendOptionsModal";
+import { getMissingAiConfiguration } from "../settingsDefaults";
 
 export interface BranchChatMapController {
   handleKeydown(this: void, event: KeyboardEvent): void;
@@ -40,9 +43,11 @@ function openMapSwitcher(plugin: BranchChatMapPlugin): void {
 export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle, onNewSpider, onLoadMap }: BranchChatMapAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = useBranchChatMapState(viewState);
-  const { map, activeNodeId, collapsedIds, hasManualPositions } = state;
+  const { map, activeNodeId, collapsedIds, hasManualPositions, generationJobs } = state;
   const [searchQuery, setSearchQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [replayPanelOpen, setReplayPanelOpen] = useState(false);
+  const replayPanelId = useId();
   const activeNode = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const settings = usePluginSettings(plugin);
   const language = settings.language;
@@ -54,6 +59,10 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     }
   }, [map, language, setTabTitle]);
 
+  useEffect(() => {
+    setReplayPanelOpen(false);
+  }, [map?.id]);
+
   const handleSwitchClick = useCallback(() => {
     openMapSwitcher(plugin);
   }, [plugin]);
@@ -61,6 +70,17 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
   const handleSelectMap = useCallback((mapId: ChatMapId) => {
     onLoadMap(mapId);
   }, [onLoadMap]);
+
+  const handleExportInteractive = useCallback(async () => {
+    if (!map) return;
+    try {
+      const path = await writeInteractiveHtmlExport(plugin.app, map, settings.defaultExportFolder, language);
+      new Notice(t(language, "interactiveExported", { path }));
+    } catch (exportError: unknown) {
+      const message = exportError instanceof Error ? exportError.message : String(exportError);
+      new Notice(t(language, "interactiveExportFailed", { message }));
+    }
+  }, [language, map, plugin.app, settings.defaultExportFolder]);
 
   const handleDeleteCurrentMap = useCallback(async () => {
     const target = viewState.getSnapshot().map;
@@ -112,6 +132,47 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     }
   }, [language, plugin.app, viewState]);
 
+  const openNodeMenu = useCallback((nodeId: NodeId, position: { x: number; y: number }) => {
+    const selectedMap = viewState.getSnapshot().map;
+    const node = selectedMap?.nodes[nodeId];
+    if (!selectedMap || !node) return;
+    const mapId = selectedMap.id;
+    viewState.setActiveNode(nodeId);
+    const isCurrent = () => viewState.getSnapshot().map?.id === mapId && Boolean(viewState.getSnapshot().map?.nodes[nodeId]);
+    const selectNode = () => { if (isCurrent()) viewState.setActiveNode(nodeId); return isCurrent(); };
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle(t(language, "newChild")).setIcon("git-branch").onClick(() => {
+      if (selectNode()) viewState.createChild();
+    }));
+    menu.addItem((item) => item.setTitle(t(language, "parent")).setIcon("arrow-left").setDisabled(!node.parentId).onClick(() => {
+      if (selectNode()) viewState.goToParent();
+    }));
+    menu.addItem((item) => item.setTitle(t(language, "summarize")).setIcon("sparkles")
+      .setDisabled(Boolean(getMissingAiConfiguration(settings))).onClick(() => {
+        if (selectNode()) void viewState.summarizeCurrentNode();
+      }));
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle(t(language, "sendOptionsTitle")).setIcon("settings-2").onClick(() => {
+      if (!selectNode()) return;
+      const contextMode = settings.contextMode
+        ?? (settings.includeFullContext ? "whole" : settings.includeParentContext ? "parent" : "none");
+      new NodeSendOptionsModal(plugin.app, {
+        node,
+        language,
+        models: settings.models ?? [],
+        defaults: { profileId: node.defaultModelProfileId ?? settings.defaultModelProfileId, contextMode },
+        current: viewState.getSnapshot().sendOptions[nodeId] ?? {},
+        onApply: (options) => { if (isCurrent()) viewState.updateSendOptions(nodeId, options); },
+      }).open();
+    }));
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle(t(language, "deleteNode")).setIcon("trash-2").setWarning(true)
+      .setDisabled(nodeId === selectedMap.rootNodeId).onClick(() => {
+        if (selectNode()) void confirmAndDeleteNode(nodeId);
+      }));
+    menu.showAtPosition(position, rootRef.current?.ownerDocument);
+  }, [confirmAndDeleteNode, language, plugin.app, settings, viewState]);
+
   const searchResults = useMemo(() => viewState.searchNodes(searchQuery), [searchQuery, state.map, viewState]);
   const searchMatchIds = useMemo(() => new Set(searchResults.map((result) => result.node.id)), [searchResults]);
 
@@ -128,6 +189,10 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
 
   const handleNoteChange = useCallback((nodeId: NodeId, note: string) => {
     viewState.updateNodeNote(nodeId, note);
+  }, [viewState]);
+
+  const handleSummaryChange = useCallback((nodeId: NodeId, summary: string) => {
+    viewState.updateNodeSummary(nodeId, summary);
   }, [viewState]);
 
   const handleRevealSearchResult = useCallback((nodeId: NodeId) => {
@@ -257,7 +322,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
   return (
     <div className="bcm-root bcm-root-graph" ref={rootRef}>
       <div className="bcm-topbar">
-        <div>
+        <div className="bcm-topbar-title">
           <div className="bcm-title-row">
             <span
               className="bcm-title-link"
@@ -280,29 +345,6 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           </div>
           <div className="bcm-topbar-meta">{mapStatsLabel(language, nodeCount, Math.max(path.length - 1, 0))}</div>
         </div>
-        <div className="bcm-topbar-actions">
-          <button className="bcm-topbar-btn" onClick={() => { void handleAutoLayout(); }} type="button" title={t(language, "autoLayout")}>
-            {t(language, "layout")}
-          </button>
-          <button className="bcm-topbar-btn" onClick={() => { void viewState.exportMap(); }} type="button" title={t(language, "export")}>
-            {t(language, "export")}
-          </button>
-          <div className="bcm-more">
-            <button className="bcm-topbar-btn" onClick={() => setMoreOpen((open) => !open)} type="button" title={t(language, "moreActions")} aria-expanded={moreOpen}>
-              {t(language, "moreActions")} ▾
-            </button>
-            {moreOpen ? (
-              <div className="bcm-more-menu">
-                <button className="bcm-more-item is-danger" onClick={() => { setMoreOpen(false); void handleDeleteCurrentMap(); }} type="button">
-                  {t(language, "deleteMap")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="bcm-workspace">
         <div className="bcm-search-panel">
           <input
             className="bcm-search-input"
@@ -327,16 +369,58 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
             </div>
           ) : null}
         </div>
+        <div className="bcm-topbar-actions">
+          <button
+            className={`bcm-topbar-btn${replayPanelOpen ? " is-active" : ""}`}
+            type="button"
+            aria-expanded={replayPanelOpen}
+            aria-controls={replayPanelId}
+            onClick={() => setReplayPanelOpen((open) => !open)}
+          >
+            {t(language, "replay")}
+          </button>
+          <button className="bcm-topbar-btn" onClick={() => { void handleAutoLayout(); }} type="button" title={t(language, "autoLayout")}>
+            {t(language, "layout")}
+          </button>
+          <button className="bcm-topbar-btn" onClick={() => { void viewState.exportMap(); }} type="button" title={t(language, "export")}>
+            {t(language, "export")}
+          </button>
+          <div className="bcm-more">
+            <button className="bcm-topbar-btn" onClick={() => setMoreOpen((open) => !open)} type="button" title={t(language, "moreActions")} aria-expanded={moreOpen}>
+              {t(language, "moreActions")} ▾
+            </button>
+            {moreOpen ? (
+              <div className="bcm-more-menu">
+                <button className="bcm-more-item" onClick={() => { setMoreOpen(false); void handleExportInteractive(); }} type="button">
+                  {t(language, "interactiveExport")}
+                </button>
+                <button className="bcm-more-item is-danger" onClick={() => { setMoreOpen(false); void handleDeleteCurrentMap(); }} type="button">
+                  {t(language, "deleteMap")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="bcm-workspace">
         <GraphCanvas
           map={map}
+          replayPanelId={replayPanelId}
+          replayPanelOpen={replayPanelOpen}
           activeNodeId={activeNode.id}
           collapsedIds={collapsedIds}
           language={language}
           searchMatchIds={searchMatchIds}
+          modelProfiles={settings.models ?? []}
+          generationJobs={generationJobs}
           onActivateNode={(nodeId) => viewState.setActiveNode(nodeId)}
           onNoteChange={handleNoteChange}
+          onSummaryChange={handleSummaryChange}
           onToggleCollapse={(nodeId) => viewState.toggleCollapse(nodeId)}
           onPositionChange={(nodeId, position) => viewState.updatePosition(nodeId, position)}
+          onCancelGeneration={(nodeId) => viewState.cancelGeneration(nodeId)}
+          onOpenNodeMenu={openNodeMenu}
         />
       </div>
     </div>

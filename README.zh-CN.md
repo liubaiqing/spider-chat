@@ -30,9 +30,24 @@
 ## ⚡ 30 秒上手
 
 1. **安装**：设置 → 第三方插件 → 浏览 → 搜索 `Spider` → 安装 → 启用
-2. **配置 API Key**：Settings → Spider → 填 `apiBaseUrl` + `apiKey` + `model`（任何 OpenAI 兼容端点都行）
+2. **配置模型档案**：Settings → Spider → 在默认档案中填写 API 地址、密钥和模型（支持 OpenAI 兼容端点）
 3. **新建一张图**：点击 Spider ribbon 图标（或运行命令 `Spider: 新建 Spider 图谱`）→ 开始聊天
 4. **试试 Tab 分支**：AI 回答里选中一段文字，按 `Tab` —— 就这么简单
+
+---
+
+## 进阶分支工作流
+
+图谱与聊天侧栏仍是实时工作界面。普通的「选中文字 → `Tab`」会立即建立单个子节点；进阶操作另设入口：
+
+- **模型档案**：保存多个 OpenAI 兼容模型配置。子节点继承父节点的默认档案，单次回答也可另选模型；AI 消息记录生成时实际使用的模型与档案名称。
+- **批量分叉**：从同一节点创建最多五个方向，每行分别设置方向和模型。生成请求进入插件级队列；默认同时运行三个，可设置为一至五个。
+- **上下文控制**：可选无附加上下文、精简父节点（默认）、完整祖先或全图。单次覆盖不会修改全局默认值。
+- **引用式合并**：创建引用其他节点的总结子节点，不改变图谱的父子关系。来源被删除后，引用仍保留标题快照。
+- **回放**：按时间、深度或广度浏览现存对话，支持暂停、单步与调速。回放无法重建已删除的编辑或逐 token 生成过程。
+- **独立 HTML 导出**：导出可离线搜索、回放和切换主题的图谱；原有 Markdown / Canvas / SVG 导出包保持原文件结构。
+
+旧版 Spider 地图和单模型设置可迁移后继续使用。实时聊天不依赖 Obsidian 原生 Canvas，也不导入 Canvas Branch Chat 的旧 `.canvas` 对话。
 
 ---
 
@@ -84,8 +99,7 @@ Spider Maps/
 
 ### 🔐 隐私 & 网络声明
 - 插件**需要联网**才能调用 AI，但你完全掌控调用哪个端点
-- **API key 仅存本地**（Obsidian 插件的 data.json），不上传任何地方
-- **不读取无关笔记**：AI 请求只包含当前分支，以及你主动开启的上下文内容
+- **API 密钥仅存本地**：可保存在插件设置或所选 `.env` 来源中；请求只会将密钥发往你配置的端点
 - **图谱数据 100% 本地**：所有地图存为 `.spider/maps/*.json`，可被 Obsidian 同步
 - **离线可用**：知识图谱、导航、导出、查看历史全部不依赖网络，只有"发送消息"需要
 
@@ -113,12 +127,12 @@ Spider Maps/
 
 | 设置 | 说明 | 默认值 |
 |---|---|---|
-| API Base URL | OpenAI 兼容端点 | `https://api.openai.com/v1` |
-| API Key | 你的 API key（密码输入框，本地存储） | — |
-| Model | 该端点支持的任意模型名 | `gpt-4o-mini` |
+| 模型档案 | 别名、模型、API 根地址或完整接口地址、密钥或 `.env` 变量名、可选提示词与生成参数 | 由旧设置迁移的默认档案 |
+| 默认模型档案 | 新分支继承的档案 | 默认档案 |
+| 上下文模式 | 无 / 精简父节点 / 完整祖先 / 全图 | 精简父节点 |
+| 上下文长度 | 旧回答截断与总长度控制 | 可设置 |
+| 并发生成数 | 插件范围的请求上限 | 3（范围 1–5） |
 | Interface Language | 中文 / English | 跟随 Obsidian |
-| Include parent context | 子节点请求是否带父节点的标题/摘要/锚点 | ✅ 开 |
-| Include full context | 把图谱中其他分支也作为参考（更费 token） | ❌ 关 |
 | Stream responses | 流式响应 | ✅ 开 |
 | Tab to create child nodes | Tab 键开关 | ✅ 开 |
 | Auto-summarize nodes | AI 自动给节点生成摘要 | ❌ 关 |
@@ -130,7 +144,7 @@ Spider Maps/
 
 ### 从社区插件市场安装（推荐）
 
-打开 **设置 → 第三方插件 → 浏览**，搜索 `Spider`，点击 **安装 → 启用**，然后在 **设置 → Spider** 中配置 API key 和 model。
+打开 **设置 → 第三方插件 → 浏览**，搜索 `Spider`，点击 **安装 → 启用**，然后在 **设置 → Spider** 中配置默认模型档案。
 
 ### 从 GitHub Release 手动安装
 1. 从最新 [Release](https://github.com/111pointer111/spider/releases/latest) 下载 `main.js`、`manifest.json` 和 `styles.css`
@@ -168,11 +182,11 @@ npm run link       # 把构建产物 symlink 到 vault
 
 ```
 src/
-  ai/          OpenAI 兼容 API provider（流式 + 同步 + summarize）
+  ai/          OpenAI 兼容请求、模型档案密钥与上下文构建
   domain/      ChatMap 不可变工厂 + 树操作 + 守卫 + Dagre 布局
-  export/      Markdown / Mermaid / Canvas / SVG / JSON 格式导出
-  state/       多视图会话管理 + 单会话 ViewState
-  storage/     Vault 内 JSON 持久化（兼容旧目录）
+  export/      Markdown / Mermaid / Canvas / SVG / JSON 与独立 HTML 导出
+  state/       按地图共享状态与请求调度器 + 单视图界面状态
+  storage/     Vault 内 JSON 持久化、稳定 ID 路径与旧文件迁移
   ui/          React 组件（图、聊天面板、画廊、弹窗）
   utils/       ID 生成、路径处理、activeDocument 兼容垫片
 tests/         vitest 单测（领域层 + 导出层 + AI 层）

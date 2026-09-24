@@ -1,19 +1,33 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { App } from "obsidian";
 import { displayTitle, nodeStatsLabel, roleLabel, t } from "../i18n";
-import type { AppLanguage, BranchSource, ChatMessage, ChatNode, ChatNodeStatus, NodeId } from "../types";
+import type { AppLanguage, BranchSource, ChatMap, ChatMessage, ChatNode, ChatNodeStatus, ContextMode, ModelProfile, NodeId } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { OnboardingCard } from "./OnboardingCard";
 import type { OnboardingGuideVariant } from "./onboarding";
 import { useReadingPosition } from "./useReadingPosition";
 import { SelectionBranchHint } from "./SelectionBranchHint";
+import type { NodeSendOptions } from "../state/viewState";
+
+interface SendMessageOptions {
+  profileId?: string;
+  contextMode?: ContextMode;
+}
+
+export interface NodeGenerationJob {
+  status: "queued" | "running" | "error";
+  profileId?: string;
+  queuePosition: number | null;
+  error?: string;
+  errorDetails?: string | null;
+}
 
 interface NodeDetailsProps {
   app: App;
   mapId: string;
   mapTitle: string;
+  map: ChatMap;
   node: ChatNode;
-  parent?: ChatNode;
   path: ChatNode[];
   draft: string;
   error: string | null;
@@ -22,21 +36,26 @@ interface NodeDetailsProps {
   isPending: boolean;
   canUseAi: boolean;
   tabBranchEnabled: boolean;
+  models: ModelProfile[];
+  defaultModelProfileId?: string;
+  defaultContextMode: ContextMode;
+  sendOptions: NodeSendOptions;
+  generationJob?: NodeGenerationJob;
   language: AppLanguage;
   onboardingVariant: OnboardingGuideVariant | null;
   streamingMessage?: ChatMessage;
-  onCancel(this: void): void;
+  onCancel(this: void, nodeId: NodeId): void;
+  onExportInteractive(this: void): void;
   onCreateChild(this: void, anchorText?: string, source?: BranchSource): void;
-  onDeleteNode(this: void, nodeId: NodeId): void;
   onDismissOnboarding(this: void): void;
   onDraftChange(this: void, value: string): void;
-  onGoParent(this: void): void;
   onMarkUnderstood(this: void): void;
   onOpenSettings(this: void): void;
   onRevealNode(this: void, nodeId: NodeId): void;
-  onRetry(this: void): void;
-  onSend(this: void): void;
-  onSummarize(this: void): void;
+  onRetry(this: void, nodeId?: NodeId): void;
+  onSend(this: void, options?: SendMessageOptions): void;
+  onSendOptionsChange(this: void, options: NodeSendOptions): void;
+  onOpenSendOptions(this: void): void;
   onStatusChange(this: void, status: ChatNodeStatus): void;
   onTitleChange(this: void, title: string): void;
 }
@@ -65,8 +84,8 @@ export function NodeDetails({
   app,
   mapId,
   mapTitle,
+  map,
   node,
-  parent,
   path,
   draft,
   error,
@@ -75,32 +94,55 @@ export function NodeDetails({
   isPending,
   canUseAi,
   tabBranchEnabled,
+  models,
+  defaultModelProfileId,
+  defaultContextMode,
+  sendOptions,
+  generationJob,
   language,
   onboardingVariant,
   streamingMessage,
   onCancel,
+  onExportInteractive,
   onCreateChild,
-  onDeleteNode,
   onDismissOnboarding,
   onDraftChange,
-  onGoParent,
   onMarkUnderstood,
   onOpenSettings,
   onRevealNode,
   onRetry,
   onSend,
-  onSummarize,
+  onSendOptionsChange,
+  onOpenSendOptions,
   onStatusChange,
   onTitleChange,
 }: NodeDetailsProps): ReactElement {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { scrollRef, onScroll, onRendered: handleMarkdownRendered, scrollToBottom, scrollToTop, showScrollTop, showScrollBottom, highlightName } = useReadingPosition(mapId, node, path);
   const [titleDraft, setTitleDraft] = useState(displayTitle(language, node.title));
+  const profileId = sendOptions.profileId ?? node.defaultModelProfileId ?? defaultModelProfileId ?? "";
+  const contextMode = sendOptions.contextMode ?? defaultContextMode;
+  const selectedProfile = models.find((item) => item.id === profileId);
+  const canSendWithSelectedProfile = canUseAi || Boolean(
+    selectedProfile?.baseUrl.trim()
+    && selectedProfile.model.trim()
+    && (selectedProfile.apiKey.trim() || selectedProfile.apiKeyEnvVar?.trim()),
+  );
+  const isJobPending = generationJob?.status === "queued" || generationJob?.status === "running";
+  const nodeError = generationJob?.status === "error" ? generationJob.error ?? error : error;
   const sourcePath = `spider/${node.id}.md`;
   const pendingMessage = streamingMessage?.content && !node.messages.some((message) => message.id === streamingMessage.id)
     ? streamingMessage
     : undefined;
   const messages = pendingMessage ? [...node.messages, pendingMessage] : node.messages;
+
+  const sendWithOptions = () => {
+    onSend({
+      profileId: profileId || undefined,
+      contextMode,
+    });
+    onSendOptionsChange({});
+  };
 
   const commitTitle = useCallback(() => {
     const nextTitle = titleDraft.trim();
@@ -132,21 +174,6 @@ export function NodeDetails({
         <div className="bcm-context-current" title={t(language, "currentNodeLabel")}>
           {displayTitle(language, node.title)}
         </div>
-        {path.length > 1 ? (
-          <nav className="bcm-path" aria-label={t(language, "explorationPath")}>
-            <span className="bcm-context-label">{t(language, "explorationPath")}</span>
-            <div className="bcm-breadcrumbs">
-              {path.slice(0, -1).map((item, index) => (
-                <span className="bcm-breadcrumb-part" key={item.id}>
-                  {index > 0 ? <span className="bcm-path-sep">/</span> : null}
-                  <button className="bcm-breadcrumb-button" type="button" onClick={() => onRevealNode(item.id)}>
-                    {displayTitle(language, item.title)}
-                  </button>
-                </span>
-              ))}
-            </div>
-          </nav>
-        ) : null}
       </header>
 
       <div className="bcm-message-area">
@@ -173,7 +200,15 @@ export function NodeDetails({
               </select>
             </div>
             <div className="bcm-node-facts">
-              {nodeStatsLabel(language, node.messages.length, node.children.length)}
+              <span>{nodeStatsLabel(language, node.messages.length, node.children.length)}</span>
+              <div className="bcm-node-badges">
+                {node.branchDirection ? <span className="bcm-node-badge is-direction">{t(language, "branchDirectionBadge")}: {node.branchDirection}</span> : null}
+                {generationJob?.status === "queued" ? <span className="bcm-node-badge is-queued">{t(language, "generationQueued")}{generationJob.queuePosition ? " · " + generationJob.queuePosition : ""}</span> : null}
+                {generationJob?.status === "running" ? <span className="bcm-node-badge is-running">{t(language, "generationRunning")}</span> : null}
+              </div>
+              <div className="bcm-node-actions">
+                <button type="button" onClick={onExportInteractive}>{t(language, "interactiveExport")}</button>
+              </div>
             </div>
           </div>
 
@@ -182,6 +217,26 @@ export function NodeDetails({
             <span>{t(language, "anchor")}</span>
             <div className="bcm-source-hint">{t(language, "selectedSourceHint")}</div>
             <MarkdownContent app={app} markdown={node.anchorText} sourcePath={sourcePath} className="bcm-context-markdown" onRendered={handleMarkdownRendered} />
+          </section>
+        ) : null}
+
+        {node.mergeSources?.length ? (
+          <section className="bcm-context-strip bcm-merge-sources" aria-label={t(language, "mergeSourcesLabel")}>
+            <span>{t(language, "mergeSourcesLabel")}</span>
+            <div className="bcm-merge-chips">
+              {node.mergeSources.map((source) => {
+                const sourceNode = map.nodes[source.nodeId];
+                return sourceNode ? (
+                  <button key={source.nodeId} type="button" className="bcm-merge-chip" onClick={() => onRevealNode(source.nodeId)}>
+                    ↗ {displayTitle(language, sourceNode.title)}
+                  </button>
+                ) : (
+                  <span key={source.nodeId} className="bcm-merge-chip is-missing" title={t(language, "mergeSourceMissing")}>
+                    {t(language, "missingSource")}: {source.titleSnapshot}
+                  </span>
+                );
+              })}
+            </div>
           </section>
         ) : null}
 
@@ -204,7 +259,9 @@ export function NodeDetails({
           <>
             {messages.map((message) => (
               <article className={`bcm-message bcm-message-${message.role}${message === pendingMessage ? " bcm-message-streaming" : ""}`} data-spider-message-id={message.id} key={message.id}>
-                <div className="bcm-message-meta">{message === pendingMessage ? t(language, "streaming") : roleLabel(language, message.role)}</div>
+                <div className="bcm-message-meta">
+                  {message === pendingMessage ? t(language, "streaming") : roleLabel(language, message.role)}
+                </div>
                 <div className="bcm-message-content bcm-streaming-content" data-spider-message-body="true">
                   <MarkdownContent app={app} markdown={message.content} sourcePath={sourcePath} className="bcm-message-content markdown-rendered" onRendered={handleMarkdownRendered} />
                   {message === pendingMessage ? <span className="bcm-caret" /> : null}
@@ -237,21 +294,21 @@ export function NodeDetails({
         ) : null}
       </div>
 
-      {error ? (
+      {nodeError ? (
         <div className="bcm-error">
-          <span>{error}</span>
-          {errorDetails ? (
+          <span>{nodeError}</span>
+          {generationJob?.errorDetails || errorDetails ? (
             <details>
               <summary>{t(language, "details")}</summary>
-              <pre>{errorDetails}</pre>
+              <pre>{generationJob?.errorDetails ?? errorDetails}</pre>
             </details>
           ) : null}
-          <button type="button" onClick={onRetry}>{t(language, "retry")}</button>
+          <button type="button" onClick={() => onRetry(node.id)}>{t(language, "retry")}</button>
         </div>
       ) : null}
 
       <div className="bcm-composer">
-        {!canUseAi ? (
+        {!canUseAi && !canSendWithSelectedProfile ? (
           <section className="bcm-provider-setup" aria-labelledby="spider-provider-setup-title">
             <div>
               <div className="bcm-provider-setup-title" id="spider-provider-setup-title">{t(language, "connectAiTitle")}</div>
@@ -272,24 +329,25 @@ export function NodeDetails({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
               e.preventDefault();
-              if (canUseAi) {
-                onSend();
+              if (canSendWithSelectedProfile) {
+                void sendWithOptions();
               }
             }
           }}
         />
+        <div className="bcm-composer-options" aria-label={t(language, "currentSendOnly")}>
+          <button type="button" onClick={onOpenSendOptions}>{t(language, "sendOptionsTitle")}</button>
+          <span className="bcm-send-options-summary">
+            {selectedProfile?.model || t(language, "defaultModelOption")}
+            {" · "}{t(language, ({ none: "contextNone", parent: "contextParent", ancestors: "contextAncestors", whole: "contextWhole" } as const)[contextMode])}
+          </span>
+        </div>
         <div className="bcm-composer-footer">
-          <div className="bcm-detail-actions">
-            <button type="button" onClick={() => onCreateChild()} title="Tab">{t(language, "newChild")}</button>
-            <button type="button" onClick={onGoParent} disabled={!parent} title="Shift + Tab">{t(language, "parent")}</button>
-            <button type="button" onClick={() => onDeleteNode(node.id)} disabled={!parent}>{t(language, "deleteNode")}</button>
-            <button type="button" onClick={onSummarize} disabled={!canUseAi} title={!canUseAi ? t(language, "missingApiKey") : undefined}>{t(language, "summarize")}</button>
-          </div>
           <div className="bcm-composer-actions">
-            {isPending ? (
-              <button type="button" onClick={onCancel}>{t(language, "stop")}</button>
+            {isPending || isJobPending ? (
+              <button type="button" onClick={() => onCancel(node.id)}>{t(language, "stop")}</button>
             ) : (
-              <button type="button" onClick={onSend} disabled={!canUseAi || !draft.trim()}>{t(language, "send")}</button>
+              <button type="button" onClick={() => { void sendWithOptions(); }} disabled={!canSendWithSelectedProfile || !draft.trim()} title={!canSendWithSelectedProfile ? t(language, "missingApiKey") : undefined}>{t(language, "send")}</button>
             )}
           </div>
         </div>

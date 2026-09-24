@@ -10,6 +10,8 @@ describe("domain guards", () => {
 
     expect(isChatNode(root)).toBe(true);
     expect(isChatMap(notedMap)).toBe(true);
+    expect(isChatNode({ ...root, summaryEditedByUser: true })).toBe(true);
+    expect(isChatNode({ ...root, summaryEditedByUser: "yes" })).toBe(false);
   });
 
   it("rejects non-string node notes", () => {
@@ -31,5 +33,25 @@ describe("domain guards", () => {
     ]) {
       expect(isChatNode({ ...root, sourceTextRange })).toBe(false);
     }
+  });
+
+  it("accepts new provenance fields while rejecting malformed references and model snapshots", () => {
+    const map = createRootMap("Provenance compatibility");
+    const root = map.nodes[map.rootNodeId];
+    const enriched = {
+      ...root,
+      defaultModelProfileId: "profile-1",
+      branchDirection: "Compare costs",
+      branchColor: "#123456",
+      mergeSources: [{ nodeId: "source-1", titleSnapshot: "Source" }],
+      messages: [{
+        id: "assistant-1", role: "assistant", content: "Answer", createdAt: new Date().toISOString(),
+        modelSnapshot: { profileId: "profile-1", alias: "Analyst", model: "model-a" },
+      }],
+    };
+    expect(isChatMap(map)).toBe(true);
+    expect(isChatNode(enriched)).toBe(true);
+    expect(isChatNode({ ...enriched, mergeSources: [{ nodeId: 1, titleSnapshot: "Source" }] })).toBe(false);
+    expect(isChatNode({ ...enriched, messages: [{ ...enriched.messages[0], modelSnapshot: { profileId: "profile-1" } }] })).toBe(false);
   });
 });

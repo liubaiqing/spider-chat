@@ -7,6 +7,11 @@
   #app { height:680px; width:520px; border:1px solid #bbb; position:fixed; right:16px; top:16px; }
   #app>.spider-chat-view { height:100%; }
   #results { white-space:pre-wrap; max-width:calc(100vw - 590px); }
+  @media (max-width: 600px) {
+    body { margin:0; }
+    #app { left:0; right:0; top:0; width:auto; height:100vh; border:0; }
+    #results { max-width:none; }
+  }
 </style>
 <h1>Source navigation regression</h1>
 <button id="run">Run source navigation checks</button>
@@ -14,4 +19,3 @@
 <p id="external">An unrelated Obsidian panel has SelfAttention selected.</p>
 <pre id="results"></pre><div id="app"></div>
 <script type="module" src="/checks.js"></script>
-

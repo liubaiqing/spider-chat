@@ -1,4 +1,4 @@
-import type { ChatMap, ChatMessage, ChatNode } from "../types";
+import type { ChatMap, ChatMessage, ChatNode, MergeSourceRef } from "../types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -31,8 +31,15 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     isString(value.id) &&
     (value.role === "system" || value.role === "user" || value.role === "assistant") &&
     isString(value.content) &&
-    isString(value.createdAt)
+    isString(value.createdAt) &&
+    (value.modelSnapshot === undefined || (isRecord(value.modelSnapshot) && isString(value.modelSnapshot.profileId) && isString(value.modelSnapshot.alias) && isString(value.modelSnapshot.model))) &&
+    (value.state === undefined || value.state === "complete" || value.state === "stopped")
   );
+}
+
+function isMergeSourceRef(value: unknown): value is MergeSourceRef {
+  return isRecord(value) && isString(value.nodeId) && isString(value.titleSnapshot) &&
+    (value.messageId === undefined || isString(value.messageId));
 }
 
 export function isChatNode(value: unknown): value is ChatNode {
@@ -50,12 +57,17 @@ export function isChatNode(value: unknown): value is ChatNode {
     Array.isArray(value.messages) &&
     value.messages.every(isChatMessage) &&
     (value.summary === undefined || isString(value.summary)) &&
+    (value.summaryEditedByUser === undefined || typeof value.summaryEditedByUser === "boolean") &&
     (value.note === undefined || isString(value.note)) &&
     (value.status === "open" || value.status === "understood" || value.status === "archived") &&
     isPosition(value.position) &&
     isStringArray(value.children) &&
     isString(value.createdAt) &&
     isString(value.updatedAt)
+    && (value.defaultModelProfileId === undefined || isString(value.defaultModelProfileId))
+    && (value.branchDirection === undefined || isString(value.branchDirection))
+    && (value.branchColor === undefined || isString(value.branchColor))
+    && (value.mergeSources === undefined || (Array.isArray(value.mergeSources) && value.mergeSources.every(isMergeSourceRef)))
   );
 }
 

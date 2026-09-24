@@ -10,8 +10,10 @@ import { getOnboardingGuideVariant } from "./onboarding";
 import { getSelectionInside, shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 import { openPluginSettings } from "./openPluginSettings";
 import { getMissingAiConfiguration } from "../settingsDefaults";
-import type { BranchSource } from "../types";
+import type { BranchSource, ContextMode } from "../types";
 import { getMessageSelection } from "./messageSelection";
+import { writeInteractiveHtmlExport } from "./exportInteractiveHtml";
+import { NodeSendOptionsModal } from "./NodeSendOptionsModal";
 
 interface BranchChatMapChatAppProps {
   plugin: BranchChatMapPlugin;
@@ -21,14 +23,15 @@ interface BranchChatMapChatAppProps {
 export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChatAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = useActiveViewState(plugin);
-  const { map, activeNodeId, drafts, error, errorDetails, focusToken, pendingNodeId, streamingMessages } = state;
+  const { map, activeNodeId, drafts, error, errorDetails, focusToken, pendingNodeId, streamingMessages, generationJobs } = state;
   const node = activeNodeId && map ? map.nodes[activeNodeId] : null;
-  const parent = node?.parentId && map ? map.nodes[node.parentId] : undefined;
   const settings = usePluginSettings(plugin);
   const language = settings.language;
   const [onboardingDismissed, setOnboardingDismissed] = useState(settings.onboardingCardDismissed);
 
   const viewState = plugin.store.getActiveSession();
+  const defaultContextMode: ContextMode = settings.contextMode
+    ?? (settings.includeFullContext ? "whole" : settings.includeParentContext ? "parent" : "none");
 
   const path = viewState?.getActivePath() ?? [];
   const onboardingVariant = getOnboardingGuideVariant(map, node, onboardingDismissed);
@@ -62,6 +65,17 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
     },
     [language, viewState],
   );
+
+  const exportInteractive = useCallback(async () => {
+    if (!map) return;
+    try {
+      const path = await writeInteractiveHtmlExport(plugin.app, map, settings.defaultExportFolder, language);
+      new Notice(t(language, "interactiveExported", { path }));
+    } catch (exportError: unknown) {
+      const message = exportError instanceof Error ? exportError.message : String(exportError);
+      new Notice(t(language, "interactiveExportFailed", { message }));
+    }
+  }, [language, map, plugin.app, settings.defaultExportFolder]);
 
   const handleDeleteCurrentMap = useCallback(async () => {
     const target = viewState?.getSnapshot().map;
@@ -231,8 +245,8 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         app={plugin.app}
         mapId={map?.id ?? ""}
         mapTitle={map ? map.title : ""}
+        map={map!}
         node={node}
-        parent={parent}
         path={path}
         draft={drafts[node.id] ?? ""}
         error={error}
@@ -241,15 +255,19 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         isPending={pendingNodeId === node.id}
         canUseAi={!getMissingAiConfiguration(settings)}
         tabBranchEnabled={settings.useTabToCreateChildNodes}
+        models={settings.models ?? []}
+        defaultModelProfileId={settings.defaultModelProfileId}
+        defaultContextMode={defaultContextMode}
+        sendOptions={state.sendOptions[node.id] ?? {}}
+        generationJob={generationJobs[node.id]}
         language={language}
         onboardingVariant={onboardingVariant}
         streamingMessage={streamingMessages[node.id]}
-        onCancel={() => vs?.cancelGeneration()}
+        onCancel={(nodeId) => vs?.cancelGeneration(nodeId)}
+        onExportInteractive={() => { void exportInteractive(); }}
         onCreateChild={createChild}
-        onDeleteNode={(nodeId) => { void confirmAndDeleteNode(nodeId); }}
         onDismissOnboarding={dismissOnboarding}
         onDraftChange={(value) => vs?.updateDraft(node.id, value)}
-        onGoParent={() => vs?.goToParent()}
         onMarkUnderstood={() => vs?.markUnderstood()}
         onOpenSettings={() => {
           if (!openPluginSettings(plugin.app, plugin.manifest.id)) {
@@ -257,9 +275,19 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
           }
         }}
         onRevealNode={(nodeId) => vs?.revealNode(nodeId)}
-        onRetry={() => void vs?.retryAssistant()}
-        onSend={() => void vs?.sendMessage()}
-        onSummarize={() => void vs?.summarizeCurrentNode()}
+        onRetry={(nodeId) => void vs?.retryAssistant(nodeId)}
+        onSend={(options) => void vs?.sendMessage(options, node.id)}
+        onSendOptionsChange={(options) => vs?.updateSendOptions(node.id, options)}
+        onOpenSendOptions={() => {
+          new NodeSendOptionsModal(plugin.app, {
+            node,
+            language,
+            models: settings.models ?? [],
+            defaults: { profileId: node.defaultModelProfileId ?? settings.defaultModelProfileId, contextMode: defaultContextMode },
+            current: state.sendOptions[node.id] ?? {},
+            onApply: (options) => vs?.updateSendOptions(node.id, options),
+          }).open();
+        }}
         onStatusChange={(status) => vs?.updateCurrentNodeStatus(status)}
         onTitleChange={(title) => vs?.updateCurrentNodeTitle(title)}
       />

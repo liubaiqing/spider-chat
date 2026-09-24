@@ -20,11 +20,11 @@ export type TranslationKey =
   | "loading"
   | "newChild"
   | "mapNameLabel"
-  | "explorationPath"
   | "currentNodeLabel"
   | "selectedSourceHint"
   | "branchSource"
   | "nodeSummaryLabel"
+  | "cardNoteLabel"
   | "nodeNote"
   | "addNodeNote"
   | "editNodeNote"
@@ -114,6 +114,53 @@ export type TranslationKey =
   | "onboardingDismiss"
   | "onboardingFinishButton"
   | "onboardingChildCreatedNotice"
+  | "mergeSourcesLabel"
+  | "mergeSourceMissing"
+  | "modelLabel"
+  | "contextMode"
+  | "contextNone"
+  | "contextParent"
+  | "contextAncestors"
+  | "contextWhole"
+  | "currentSendOnly"
+  | "sendOptionsTitle"
+  | "sendOptionsForNode"
+  | "defaultModelOption"
+  | "apply"
+  | "nodeSettingsHint"
+  | "editNodeSummary"
+  | "summaryPlaceholder"
+  | "interactiveExport"
+  | "interactiveExported"
+  | "interactiveExportFailed"
+  | "replay"
+  | "replayMode"
+  | "replayTime"
+  | "replayDepth"
+  | "replayBreadth"
+  | "pause"
+  | "previousStep"
+  | "nextStep"
+  | "replaySpeed"
+  | "restoreGraph"
+  | "replayProgress"
+  | "replayIdle"
+  | "exitReplay"
+  | "replayHelp"
+  | "replayHelpOrder"
+  | "replayHelpControls"
+  | "replayModeHint"
+  | "replayPlayHint"
+  | "replaySpeedHint"
+  | "replayRangeHint"
+  | "exitReplayHint"
+  | "generationQueued"
+  | "generationRunning"
+  | "generationError"
+  | "branchDirectionBadge"
+  | "branchModelBadge"
+  | "sourceReference"
+  | "missingSource"
   | "settingsTitle"
   | "settingLanguageName"
   | "settingLanguageDesc"
@@ -162,11 +209,11 @@ const zh: TranslationDictionary = {
   loading: "正在加载 Spider...",
   newChild: "创建分支",
   mapNameLabel: "图谱",
-  explorationPath: "探索路径",
   currentNodeLabel: "当前节点",
   selectedSourceHint: "来自上一节点选中的原文",
   branchSource: "追问来源",
-  nodeSummaryLabel: "结论",
+  nodeSummaryLabel: "总结",
+  cardNoteLabel: "简记",
   nodeNote: "我的笔记",
   addNodeNote: "添加节点笔记",
   editNodeNote: "编辑节点笔记",
@@ -256,6 +303,53 @@ const zh: TranslationDictionary = {
   onboardingDismiss: "隐藏引导",
   onboardingFinishButton: "关闭",
   onboardingChildCreatedNotice: "已从选中文本创建分支",
+  mergeSourcesLabel: "引用的来源分支",
+  mergeSourceMissing: "来源节点已删除",
+  modelLabel: "模型",
+  contextMode: "上下文",
+  contextNone: "只发送当前问题",
+  contextParent: "加上级节点的要点",
+  contextAncestors: "加上沿途所有上级节点",
+  contextWhole: "加入整张图谱",
+  currentSendOnly: "仅本次发送",
+  sendOptionsTitle: "本次提问设置",
+  sendOptionsForNode: "设置“{title}”的下一次提问。发送后恢复默认设置。",
+  defaultModelOption: "默认模型",
+  apply: "应用",
+  nodeSettingsHint: "右键节点打开操作菜单",
+  editNodeSummary: "编辑节点总结",
+  summaryPlaceholder: "编辑这段总结，支持 Markdown。",
+  interactiveExport: "导出为 HTML",
+  interactiveExported: "交互式 HTML 已导出：{path}",
+  interactiveExportFailed: "HTML 导出失败：{message}",
+  replay: "回放",
+  replayMode: "回放顺序",
+  replayTime: "按时间",
+  replayDepth: "按深度",
+  replayBreadth: "按广度",
+  pause: "暂停",
+  previousStep: "上一步",
+  nextStep: "下一步",
+  replaySpeed: "速度",
+  restoreGraph: "还原图谱",
+  replayProgress: "第 {current} / {total} 个节点",
+  replayIdle: "当前显示完整图谱",
+  exitReplay: "退出回放",
+  replayHelp: "回放说明",
+  replayHelpOrder: "按时间、深度或广度逐个显示现有节点；不会重新生成回答。",
+  replayHelpControls: "播放、单步或拖动进度条查看；退出后恢复完整图谱和原先选中的节点。",
+  replayModeHint: "选择节点出现的顺序，不改变图谱内容",
+  replayPlayHint: "按当前顺序逐个显示节点",
+  replaySpeedHint: "调整自动播放的速度",
+  replayRangeHint: "拖动跳转回放进度；最左端显示完整图谱",
+  exitReplayHint: "结束回放，恢复完整图谱和原先选中的节点",
+  generationQueued: "排队中",
+  generationRunning: "生成中",
+  generationError: "生成失败",
+  branchDirectionBadge: "方向",
+  branchModelBadge: "模型",
+  sourceReference: "来源",
+  missingSource: "来源节点缺失",
   settingsTitle: "Spider",
   settingLanguageName: "界面语言",
   settingLanguageDesc: "切换插件界面语言，所有已打开的 Spider 视图会立即刷新。",
@@ -303,11 +397,11 @@ const en: TranslationDictionary = {
   loading: "Loading Spider...",
   newChild: "Create branch",
   mapNameLabel: "Map",
-  explorationPath: "Exploration path",
   currentNodeLabel: "Current node",
   selectedSourceHint: "Selected from the parent branch",
   branchSource: "Source text",
   nodeSummaryLabel: "Summary",
+  cardNoteLabel: "Quick note",
   nodeNote: "My note",
   addNodeNote: "Add node note",
   editNodeNote: "Edit node note",
@@ -397,6 +491,53 @@ const en: TranslationDictionary = {
   onboardingDismiss: "Hide guide",
   onboardingFinishButton: "Close",
   onboardingChildCreatedNotice: "Created a child node from selection",
+  mergeSourcesLabel: "Referenced source branches",
+  mergeSourceMissing: "Source node was deleted",
+  modelLabel: "Model",
+  contextMode: "Context",
+  contextNone: "Current question only",
+  contextParent: "Add the previous node's key points",
+  contextAncestors: "Add all previous nodes on this path",
+  contextWhole: "Add the entire map",
+  currentSendOnly: "This send only",
+  sendOptionsTitle: "Next question settings",
+  sendOptionsForNode: "Configure the next question for “{title}”. Defaults return after sending.",
+  defaultModelOption: "Default model",
+  apply: "Apply",
+  nodeSettingsHint: "Right click a node for its actions",
+  editNodeSummary: "Edit node summary",
+  summaryPlaceholder: "Edit this summary. Markdown is supported.",
+  interactiveExport: "Export as HTML",
+  interactiveExported: "Interactive HTML exported: {path}",
+  interactiveExportFailed: "HTML export failed: {message}",
+  replay: "Replay",
+  replayMode: "Replay order",
+  replayTime: "Time",
+  replayDepth: "Depth first",
+  replayBreadth: "Breadth first",
+  pause: "Pause",
+  previousStep: "Previous step",
+  nextStep: "Next step",
+  replaySpeed: "Speed",
+  restoreGraph: "Restore graph",
+  replayProgress: "Node {current} of {total}",
+  replayIdle: "Showing the full graph",
+  exitReplay: "Exit replay",
+  replayHelp: "Replay guide",
+  replayHelpOrder: "Show existing nodes one by one in time, depth-first, or breadth-first order. Answers are not generated again.",
+  replayHelpControls: "Play, step, or drag the timeline. Exit to restore the full graph and your previous selection.",
+  replayModeHint: "Choose the order in which nodes appear; the graph itself is unchanged",
+  replayPlayHint: "Show nodes one by one in the selected order",
+  replaySpeedHint: "Adjust automatic playback speed",
+  replayRangeHint: "Drag to jump to a replay step; the far left shows the full graph",
+  exitReplayHint: "End replay and restore the full graph and previous selection",
+  generationQueued: "Queued",
+  generationRunning: "Generating",
+  generationError: "Generation failed",
+  branchDirectionBadge: "Direction",
+  branchModelBadge: "Model",
+  sourceReference: "Source",
+  missingSource: "Source node is missing",
   settingsTitle: "Spider",
   settingLanguageName: "Interface language",
   settingLanguageDesc: "Switch the plugin interface language. All open Spider views update immediately.",

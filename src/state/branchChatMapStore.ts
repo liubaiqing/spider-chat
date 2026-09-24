@@ -1,6 +1,7 @@
 import type BranchChatMapPlugin from "../main";
 import { MapRepository } from "../storage/mapRepository";
 import { ViewState } from "./viewState";
+import { MapDocumentRegistry } from "./mapDocument";
 import type { ChatMap, ChatMapId } from "../types";
 
 export type { BranchChatMapState } from "./viewState";
@@ -15,6 +16,7 @@ function generateSessionId(): string {
 
 export class BranchChatMapStore {
   readonly repository: MapRepository;
+  readonly documents: MapDocumentRegistry;
   private readonly plugin: BranchChatMapPlugin;
   private readonly sessions = new Map<string, ViewState>();
   private activeSessionId: string | null = null;
@@ -24,11 +26,12 @@ export class BranchChatMapStore {
   constructor(plugin: BranchChatMapPlugin) {
     this.plugin = plugin;
     this.repository = new MapRepository(plugin.app);
+    this.documents = new MapDocumentRegistry(this.repository);
   }
 
   prepareSessionWithMap(map: ChatMap): string {
     const id = generateSessionId();
-    const vs = new ViewState(this.plugin, this.repository, map);
+    const vs = new ViewState(this.plugin, this.repository, map, this.documents);
     this.sessions.set(id, vs);
     this.pendingSession = { id, vs };
     return id;
@@ -46,7 +49,7 @@ export class BranchChatMapStore {
       return existing;
     }
 
-    const vs = new ViewState(this.plugin, this.repository);
+    const vs = new ViewState(this.plugin, this.repository, undefined, this.documents);
     this.sessions.set(sessionId, vs);
     return vs;
   }
@@ -131,5 +134,6 @@ export class BranchChatMapStore {
     }
     this.sessions.clear();
     this.activeViewListeners.clear();
+    this.documents.dispose();
   }
 }

@@ -196,23 +196,4 @@ export function getAncestorPath(map: ChatMap, nodeId: NodeId): ChatNode[] {
   return path;
 }
 
-export function walkTree(map: ChatMap, startId = map.rootNodeId): ChatNode[] {
-  const start = map.nodes[startId];
-  if (!start) {
-    return [];
-  }
 
-  const result: ChatNode[] = [];
-  const visit = (node: ChatNode): void => {
-    result.push(node);
-    for (const childId of node.children) {
-      const child = map.nodes[childId];
-      if (child) {
-        visit(child);
-      }
-    }
-  };
-
-  visit(start);
-  return result;
-}

@@ -12,7 +12,7 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, ModelProfile, NodeId } from "../types";
 import { markdownToPlainText, truncateText } from "../utils/text";
@@ -26,6 +26,8 @@ interface BranchNodeData {
   node: ChatNode;
   active: boolean;
   inPath: boolean;
+  /** The root question anchors the map, so it keeps its own affordance. */
+  isRoot: boolean;
   collapsed: boolean;
   childCount: number;
   language: AppLanguage;
@@ -58,7 +60,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
 
   return (
     <div
-      className={`bcm-graph-node ${data.active ? "is-active" : ""} ${data.inPath ? "is-path" : ""} ${
+      className={`bcm-graph-node ${data.isRoot ? "is-root" : ""} ${data.active ? "is-active" : ""} ${data.inPath ? "is-path" : ""} ${
         data.node.status === "understood" ? "is-understood" : ""
       } ${
         data.node.status === "archived" ? "is-archived" : ""
@@ -67,6 +69,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
       <Handle type="target" position={Position.Left} />
       <div className="bcm-node-meta">
         <span className="bcm-node-status">
+          {data.isRoot ? <span className="bcm-node-root-badge">{t(data.language, "rootNode")}</span> : null}
           <span className="bcm-node-status-dot" aria-hidden="true" />
           {statusLabelText}
         </span>
@@ -360,6 +363,7 @@ function GraphCanvasInner({
           node,
           active: node.id === activeNodeId,
           inPath: activePathIds.has(node.id),
+          isRoot: node.id === map.rootNodeId,
           collapsed: collapsedIds.has(node.id),
           childCount: node.children.length,
           language,
@@ -375,7 +379,7 @@ function GraphCanvasInner({
           onCancelGeneration,
         },
       }));
-  }, [activeNodeId, activePathIds, collapsedIds, generationJobs, language, map.nodes, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
+  }, [activeNodeId, activePathIds, collapsedIds, generationJobs, language, map.nodes, map.rootNodeId, modelProfiles, onActivateNode, onCancelGeneration, onNoteChange, onSummaryChange, onToggleCollapse, pinnedNoteNodeId, searchMatchIds, visibleIds]);
 
   const computedEdges = useMemo<Edge[]>(() => {
     return map.edges

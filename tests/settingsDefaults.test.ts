@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultSettings, getMissingAiConfiguration, resolveAppLanguage } from "../src/settingsDefaults";
+import { createDefaultSettings, detectThinkingStyle, getMissingAiConfiguration, resolveAppLanguage, resolveThinkingStyle } from "../src/settingsDefaults";
+import type { ModelProfile } from "../src/types";
+
+function profile(overrides: Partial<ModelProfile> = {}): ModelProfile {
+  return { id: "p", alias: "P", model: "m", baseUrl: "https://api.deepseek.com/v1", apiKey: "k", ...overrides };
+}
 
 describe("settings defaults", () => {
   it("follows the Obsidian locale and falls back to English", () => {
@@ -18,5 +23,25 @@ describe("settings defaults", () => {
     expect(getMissingAiConfiguration({ ...configured, apiBaseUrl: "" })).toBe("apiBaseUrl");
     expect(getMissingAiConfiguration({ ...configured, apiKey: "" })).toBe("apiKey");
     expect(getMissingAiConfiguration({ ...configured, model: "" })).toBe("model");
+  });
+
+  it("detects the thinking switch from the endpoint host", () => {
+    expect(detectThinkingStyle("https://api.deepseek.com/v1")).toBe("thinking");
+    expect(detectThinkingStyle("https://ark.cn-beijing.volces.com/api/v3")).toBe("thinking");
+    expect(detectThinkingStyle("https://dashscope.aliyuncs.com/compatible-mode/v1")).toBe("enable_thinking");
+    expect(detectThinkingStyle("https://api.siliconflow.cn/v1")).toBe("enable_thinking");
+    expect(detectThinkingStyle("https://openrouter.ai/api/v1")).toBe("reasoning");
+    // Unknown or unparsable endpoints must stay silent: strict servers reject extra fields.
+    expect(detectThinkingStyle("https://api.openai.com/v1")).toBe("none");
+    expect(detectThinkingStyle("")).toBe("none");
+    expect(detectThinkingStyle("not a url")).toBe("none");
+  });
+
+  it("lets an explicit profile choice override endpoint detection", () => {
+    expect(resolveThinkingStyle(profile())).toBe("thinking");
+    expect(resolveThinkingStyle(profile({ thinkingParamStyle: "none" }))).toBe("none");
+    expect(resolveThinkingStyle(profile({ baseUrl: "https://api.openai.com/v1", thinkingParamStyle: "enable_thinking" }))).toBe("enable_thinking");
+    expect(resolveThinkingStyle(profile({ thinkingParamStyle: "auto" }))).toBe("thinking");
+    expect(resolveThinkingStyle(undefined)).toBe("none");
   });
 });

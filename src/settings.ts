@@ -4,7 +4,7 @@ import { DEFAULT_EXPORT_DIR } from "./constants";
 import { t } from "./i18n";
 import { OpenAICompatibleProvider, type ApiTestResult } from "./ai/openAICompatibleProvider";
 import { createDefaultModelProfile, normalizeApiBaseUrl } from "./settingsDefaults";
-import type { ContextMode, ModelProfile } from "./types";
+import type { ContextMode, ModelProfile, ThinkingParamStyle } from "./types";
 
 export { DEFAULT_SETTINGS } from "./settingsDefaults";
 
@@ -244,6 +244,24 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
 
     this.addProfileNumber(profile, "temperature", label(language, "温度", "Temperature"), "0–2", advanced);
     this.addProfileNumber(profile, "maxTokens", label(language, "最大输出 Token", "Maximum output tokens"), "", advanced);
+
+    new Setting(advanced)
+      .setName(t(language, "thinkingStyleLabel"))
+      .setDesc(t(language, "thinkingStyleDesc"))
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("auto", label(language, "自动（按 API 地址判断）", "Automatic (from the API address)"))
+          .addOption("none", label(language, "不发送", "Send nothing"))
+          .addOption("thinking", '{"thinking": {"type": "enabled|disabled"}}')
+          .addOption("enable_thinking", '{"enable_thinking": true|false}')
+          .addOption("reasoning", '{"reasoning": {"enabled": true|false}}')
+          .setValue(profile.thinkingParamStyle ?? "auto")
+          .onChange(async (value) => {
+            await this.updateProfile(profile.id, {
+              thinkingParamStyle: isThinkingParamStyle(value) ? value : "auto",
+            });
+          });
+      });
 
     const testResult = this.apiTestResults.get(profile.id);
     const testSetting = new Setting(this.containerEl)
@@ -539,6 +557,11 @@ function formatApiTestResult(result: ApiTestResult): string {
 
 function label(language: "zh-CN" | "en", chinese: string, english: string): string {
   return language === "zh-CN" ? chinese : english;
+}
+
+function isThinkingParamStyle(value: string): value is ThinkingParamStyle {
+  return value === "auto" || value === "none" || value === "thinking"
+    || value === "enable_thinking" || value === "reasoning";
 }
 
 function isContextMode(value: string): value is ContextMode {

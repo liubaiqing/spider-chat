@@ -17,9 +17,14 @@ export interface ModelProfile {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
-  color?: string;
-  icon?: string;
+  /** How the deep-thinking switch is sent to this endpoint. "auto" detects it. */
+  thinkingParamStyle?: ThinkingParamStyle;
 }
+
+export type ThinkingParamStyle = "auto" | "none" | "thinking" | "enable_thinking" | "reasoning";
+
+/** One entry per option in the export picker. */
+export type ExportFormat = "package" | "interactive" | "markdown" | "mermaid";
 
 export interface ModelSnapshot {
   profileId: string;
@@ -40,6 +45,11 @@ export interface ChatMessage {
   createdAt: string;
   modelSnapshot?: ModelSnapshot;
   state?: "complete" | "stopped";
+  /**
+   * Chain-of-thought text from reasoning models. It stays out of the answer, out of
+   * the request messages, and out of exports; the chat panel renders it collapsed.
+   */
+  reasoning?: string;
 }
 
 /** UTF-16 offsets within a rendered message body; end is exclusive. */
@@ -122,6 +132,14 @@ export interface AiChatRequest {
   profile?: ModelProfile;
   contextMode?: ContextMode;
   systemPromptOverride?: string;
+  /**
+   * Reasoning models report their thinking here: once for a non-streaming request,
+   * and per delta while streaming. Answer text keeps using the normal return value
+   * or stream chunks, so providers that ignore this callback behave exactly as before.
+   */
+  onReasoning?: (text: string) => void;
+  /** Deep-thinking switch for this request; ignored when the endpoint style is "none". */
+  thinking?: boolean;
 }
 
 export interface AiProvider {

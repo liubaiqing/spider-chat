@@ -19,7 +19,11 @@ const settings: BranchChatMapSettings = {
   onboardingCardDismissed: false,
 };
 
-function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchChatMapSettings> = {}): ViewState {
+function createViewState(
+  initialMap: ChatMap,
+  settingsOverride: Partial<BranchChatMapSettings> = {},
+  written: Array<{ path: string; content: string }> = [],
+): ViewState {
   const plugin = {
     settings: { ...settings, ...settingsOverride },
     saveSettings: async () => {},
@@ -31,7 +35,10 @@ function createViewState(initialMap: ChatMap, settingsOverride: Partial<BranchCh
     deleteMap: async () => true,
     loadMap: async () => null,
     loadLatestMap: async () => null,
-    writeExport: async (_folder: string, path: string) => path,
+    writeExport: async (_folder: string, path: string, content = "") => {
+      written.push({ path, content });
+      return path;
+    },
   };
 
   return new ViewState(plugin, repository as never, initialMap);
@@ -104,7 +111,7 @@ describe("ViewState", () => {
       vs.createChild("部分回答", { messageId: sourceMessageId, start: 0, end: 4 });
       const childId = vs.getSnapshot().activeNodeId!;
       vs.updateNodeNote(map.rootNodeId, "流式期间的理解");
-      vs.markUnderstood();
+      vs.updateCurrentNodeStatus("understood");
       finishStream();
       await titleStarted;
       vs.updateNodeNote(map.rootNodeId, "等待标题期间的新理解");
@@ -377,5 +384,123 @@ describe("ViewState", () => {
     expect(snapshot.map?.nodes[map.rootNodeId]?.messages).toHaveLength(0);
     expect(snapshot.drafts[map.rootNodeId]).toBe("Explain retrieval augmented generation");
     expect(snapshot.error).toBe("Missing API key. Add one in Spider settings.");
+  });
+
+  it("writes one self-contained file for the markdown and mermaid formats", async () => {
+    const map = createRootMap("Export", "Root question");
+    const written: Array<{ path: string; content: string }> = [];
+    const vs = createViewState(map, {}, written);
+
+    await vs.exportMapAs("markdown");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.path.endsWith(".md")).toBe(true);
+    expect(written[0]?.content).toContain("## 目录");
+    // Standalone files link to headings in the same note, never to package files.
+    expect(written[0]?.content).toContain("[[#Root question]]");
+    expect(written[0]?.content).not.toContain("../index.md");
+    expect(written[0]?.content).not.toContain("../map.canvas");
+
+    written.length = 0;
+    await vs.exportMapAs("mermaid");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.path.endsWith("-mermaid.md")).toBe(true);
+    expect(written[0]?.content.startsWith("mindmap")).toBe(true);
+  });
+
+  it("keeps the composer's model, context, and thinking choices together", () => {
+    const map = createRootMap("Composer", "Composer root");
+    const vs = createViewState(map);
+    const nodeId = map.rootNodeId;
+
+    vs.updateSendOptions(nodeId, { contextMode: "ancestors" });
+    vs.updateSendOptions(nodeId, { thinking: false });
+    expect(vs.getSnapshot().sendOptions[nodeId]).toEqual({ contextMode: "ancestors", thinking: false });
+
+    vs.updateNodeDefaultProfile(nodeId, "profile-2");
+    expect(vs.getSnapshot().map?.nodes[nodeId]?.defaultModelProfileId).toBe("profile-2");
+
+    // Clearing a one-off model override must not drop the neighbouring choices.
+    vs.updateSendOptions(nodeId, { profileId: undefined });
+    expect(vs.getSnapshot().sendOptions[nodeId]?.thinking).toBe(false);
+    expect(vs.getSnapshot().sendOptions[nodeId]?.contextMode).toBe("ancestors");
+  });
+
+  it("stores streamed reasoning alongside the answer", async () => {
+    const map = createRootMap("Reasoning", "Named root");
+    const vs = createViewState(map);
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* (request) {
+      request.onReasoning?.("先想一下");
+      yield "回答";
+    });
+    try {
+      vs.updateDraft(map.rootNodeId, "Question");
+      await vs.sendMessage();
+
+      const message = vs.getSnapshot().map?.nodes[map.rootNodeId]?.messages.at(-1);
+      expect(message?.content).toBe("回答");
+      expect(message?.reasoning).toBe("先想一下");
+      expect(vs.getSnapshot().streamingMessages).toEqual({});
+    } finally {
+      stream.mockRestore();
+    }
+  });
+
+  it("keeps the completed answer when automatic summarization fails", async () => {
+    const map = createRootMap("Summary failure", "Named root");
+    const vs = createViewState(map, { autoSummarizeNodes: true });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "Assistant answer";
+    });
+    const summarize = vi.spyOn(OpenAICompatibleProvider.prototype, "summarizeNode")
+      .mockRejectedValue(new Error("context_length_exceeded"));
+    try {
+      vs.updateDraft(map.rootNodeId, "Question");
+      await vs.sendMessage();
+
+      const snapshot = vs.getSnapshot();
+      expect(snapshot.map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("Assistant answer");
+      expect(snapshot.map?.nodes[map.rootNodeId]?.summary).toBeUndefined();
+      expect(snapshot.generationJobs[map.rootNodeId]).toBeUndefined();
+      expect(snapshot.error).toBeNull();
+    } finally {
+      stream.mockRestore();
+      summarize.mockRestore();
+    }
+  });
+
+  it("drops a late summary and skips naming after the run is cancelled", async () => {
+    let releaseSummary!: (summary: string) => void;
+    let summaryStarted!: () => void;
+    const summaryPaused = new Promise<string>((resolve) => { releaseSummary = resolve; });
+    const summaryReady = new Promise<void>((resolve) => { summaryStarted = resolve; });
+    const map = createRootMap();
+    const vs = createViewState(map, { autoSummarizeNodes: true });
+    const stream = vi.spyOn(OpenAICompatibleProvider.prototype, "streamChat").mockImplementation(async function* () {
+      yield "Assistant answer";
+    });
+    const summarize = vi.spyOn(OpenAICompatibleProvider.prototype, "summarizeNode").mockImplementation(() => {
+      summaryStarted();
+      return summaryPaused;
+    });
+    const title = vi.spyOn(OpenAICompatibleProvider.prototype, "titleNode").mockResolvedValue("Late title");
+    try {
+      vs.updateDraft(map.rootNodeId, "Question");
+      const sending = vs.sendMessage();
+      await summaryReady;
+      vs.cancelGeneration();
+      releaseSummary("Late summary");
+      await sending;
+
+      const snapshot = vs.getSnapshot();
+      expect(snapshot.map?.nodes[map.rootNodeId]?.messages.at(-1)?.content).toBe("Assistant answer");
+      expect(snapshot.map?.nodes[map.rootNodeId]?.summary).toBeUndefined();
+      expect(title).not.toHaveBeenCalled();
+      expect(snapshot.streamingMessages).toEqual({});
+    } finally {
+      releaseSummary("Late summary");
+      stream.mockRestore();
+      summarize.mockRestore();
+      title.mockRestore();
+    }
   });
 });

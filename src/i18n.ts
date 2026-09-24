@@ -13,7 +13,6 @@ export type TranslationKey =
   | "deleteNode"
   | "delete"
   | "cancel"
-  | "viewNotReady"
   | "defaultMapTitle"
   | "rootQuestionTitle"
   | "untitledQuestionTitle"
@@ -22,7 +21,6 @@ export type TranslationKey =
   | "mapNameLabel"
   | "currentNodeLabel"
   | "selectedSourceHint"
-  | "branchSource"
   | "nodeSummaryLabel"
   | "cardNoteLabel"
   | "nodeNote"
@@ -34,7 +32,6 @@ export type TranslationKey =
   | "noteSaved"
   | "closeNodeNote"
   | "hasAnchorText"
-  | "hasAiSummary"
   | "autoLayout"
   | "layout"
   | "export"
@@ -58,26 +55,27 @@ export type TranslationKey =
   | "noMessagesYet"
   | "updatedAt"
   | "rootNode"
-  | "childOf"
   | "anchor"
   | "summary"
   | "parent"
   | "summarize"
-  | "markUnderstood"
   | "statusOpen"
   | "statusUnderstood"
   | "statusArchived"
-  | "nodeMessages"
   | "streaming"
   | "emptyHint"
   | "composerPlaceholder"
+  | "thinkingToggle"
+  | "thinkingToggleHint"
+  | "thinkingStyleLabel"
+  | "thinkingStyleDesc"
+  | "composerHint"
   | "send"
   | "stop"
   | "retry"
   | "retryUnavailable"
   | "exported"
   | "apiTest"
-  | "apiTestDesc"
   | "apiTesting"
   | "apiTestSuccess"
   | "apiTestFailed"
@@ -122,7 +120,6 @@ export type TranslationKey =
   | "contextParent"
   | "contextAncestors"
   | "contextWhole"
-  | "currentSendOnly"
   | "sendOptionsTitle"
   | "sendOptionsForNode"
   | "defaultModelOption"
@@ -130,9 +127,15 @@ export type TranslationKey =
   | "nodeSettingsHint"
   | "editNodeSummary"
   | "summaryPlaceholder"
-  | "interactiveExport"
-  | "interactiveExported"
-  | "interactiveExportFailed"
+  | "exportChooseTitle"
+  | "exportPackageName"
+  | "exportPackageDesc"
+  | "exportInteractiveName"
+  | "exportInteractiveDesc"
+  | "exportMarkdownName"
+  | "exportMarkdownDesc"
+  | "exportMermaidName"
+  | "exportMermaidDesc"
   | "replay"
   | "replayMode"
   | "replayTime"
@@ -142,7 +145,6 @@ export type TranslationKey =
   | "previousStep"
   | "nextStep"
   | "replaySpeed"
-  | "restoreGraph"
   | "replayProgress"
   | "replayIdle"
   | "exitReplay"
@@ -159,25 +161,14 @@ export type TranslationKey =
   | "generationError"
   | "branchDirectionBadge"
   | "branchModelBadge"
-  | "sourceReference"
   | "missingSource"
   | "settingsTitle"
   | "settingLanguageName"
   | "settingLanguageDesc"
-  | "settingApiBaseUrlName"
-  | "settingApiBaseUrlDesc"
-  | "settingApiKeyName"
-  | "settingApiKeyDesc"
-  | "settingModelName"
-  | "settingModelDesc"
   | "settingExportFolderName"
   | "settingExportFolderDesc"
   | "settingTabName"
   | "settingTabDesc"
-  | "settingParentContextName"
-  | "settingParentContextDesc"
-  | "settingFullContextName"
-  | "settingFullContextDesc"
   | "settingStreamName"
   | "settingStreamDesc"
   | "settingAutoSummaryName"
@@ -202,7 +193,6 @@ const zh: TranslationDictionary = {
   cancel: "取消",
   newMapCommand: "新建 Spider 图谱",
   switchMapCommand: "切换 Spider 图谱",
-  viewNotReady: "Spider 还没准备好。",
   defaultMapTitle: "未命名对话图谱",
   rootQuestionTitle: "根问题",
   untitledQuestionTitle: "未命名问题",
@@ -211,7 +201,6 @@ const zh: TranslationDictionary = {
   mapNameLabel: "图谱",
   currentNodeLabel: "当前节点",
   selectedSourceHint: "来自上一节点选中的原文",
-  branchSource: "追问来源",
   nodeSummaryLabel: "总结",
   cardNoteLabel: "简记",
   nodeNote: "我的笔记",
@@ -223,7 +212,6 @@ const zh: TranslationDictionary = {
   noteSaved: "已自动保存",
   closeNodeNote: "关闭节点笔记",
   hasAnchorText: "有原文",
-  hasAiSummary: "有 AI 总结",
   autoLayout: "自动布局",
   layout: "布局",
   export: "导出",
@@ -247,26 +235,27 @@ const zh: TranslationDictionary = {
   noMessagesYet: "暂无对话",
   updatedAt: "更新于 {time}",
   rootNode: "根节点",
-  childOf: "上级：{title}",
   anchor: "原文锚点",
   summary: "节点总结",
   parent: "返回上级",
   summarize: "总结",
-  markUnderstood: "已理解",
   statusOpen: "进行中",
   statusUnderstood: "已理解",
   statusArchived: "已归档",
-  nodeMessages: "节点消息",
   streaming: "生成中",
   emptyHint: "先输入一个问题。AI 回复后，选中一句想深入的内容，按 Tab 创建分支。",
-  composerPlaceholder: "问这个节点的问题。Enter 发送，Shift + Enter 换行。",
+  composerPlaceholder: "问这个节点的问题…",
+  thinkingToggle: "深度思考",
+  thinkingToggleHint: "让模型先输出思维链再作答。",
+  composerHint: "Enter 发送 · Shift + Enter 换行",
+  thinkingStyleLabel: "思考参数",
+  thinkingStyleDesc: "深度思考开关以什么形式发给该接口。自动会按 API 地址判断；无法识别的接口不发送该参数。",
   send: "发送",
   stop: "停止",
   retry: "重试",
   retryUnavailable: "只有最新一条用户消息生成失败后才能重试。",
   exported: "已导出到 {path}",
   apiTest: "测试 API",
-  apiTestDesc: "验证当前 API 地址、API Key 和模型是否可用。",
   apiTesting: "正在测试...",
   apiTestSuccess: "API 配置可用，模型响应正常。",
   apiTestFailed: "API 测试失败，请查看详情。",
@@ -311,7 +300,6 @@ const zh: TranslationDictionary = {
   contextParent: "加上级节点的要点",
   contextAncestors: "加上沿途所有上级节点",
   contextWhole: "加入整张图谱",
-  currentSendOnly: "仅本次发送",
   sendOptionsTitle: "本次提问设置",
   sendOptionsForNode: "设置“{title}”的下一次提问。发送后恢复默认设置。",
   defaultModelOption: "默认模型",
@@ -319,9 +307,15 @@ const zh: TranslationDictionary = {
   nodeSettingsHint: "右键节点打开操作菜单",
   editNodeSummary: "编辑节点总结",
   summaryPlaceholder: "编辑这段总结，支持 Markdown。",
-  interactiveExport: "导出为 HTML",
-  interactiveExported: "交互式 HTML 已导出：{path}",
-  interactiveExportFailed: "HTML 导出失败：{message}",
+  exportChooseTitle: "选择导出格式",
+  exportPackageName: "完整研究包",
+  exportPackageDesc: "一个文件夹：入口笔记、研究简报、每节点一篇 Markdown、可编辑 Canvas 与 SVG 图谱。",
+  exportInteractiveName: "交互式 HTML",
+  exportInteractiveDesc: "单个离线文件，自带搜索、回放与主题切换，方便分享。",
+  exportMarkdownName: "单个 Markdown",
+  exportMarkdownDesc: "整张图谱合成一个带目录的 Markdown 文件，节点之间用标题锚点互相跳转。",
+  exportMermaidName: "Mermaid 思维导图",
+  exportMermaidDesc: "输出 Mermaid mindmap 代码块，可直接贴进任意笔记渲染。",
   replay: "回放",
   replayMode: "回放顺序",
   replayTime: "按时间",
@@ -331,7 +325,6 @@ const zh: TranslationDictionary = {
   previousStep: "上一步",
   nextStep: "下一步",
   replaySpeed: "速度",
-  restoreGraph: "还原图谱",
   replayProgress: "第 {current} / {total} 个节点",
   replayIdle: "当前显示完整图谱",
   exitReplay: "退出回放",
@@ -348,25 +341,14 @@ const zh: TranslationDictionary = {
   generationError: "生成失败",
   branchDirectionBadge: "方向",
   branchModelBadge: "模型",
-  sourceReference: "来源",
   missingSource: "来源节点缺失",
   settingsTitle: "Spider",
   settingLanguageName: "界面语言",
   settingLanguageDesc: "切换插件界面语言，所有已打开的 Spider 视图会立即刷新。",
-  settingApiBaseUrlName: "API 地址",
-  settingApiBaseUrlDesc: "OpenAI-compatible 的 chat completions 基础地址。",
-  settingApiKeyName: "API Key",
-  settingApiKeyDesc: "保存在本机 Obsidian 插件数据里。",
-  settingModelName: "模型",
-  settingModelDesc: "填写你的 OpenAI-compatible 服务支持的模型名。",
   settingExportFolderName: "默认导出文件夹",
   settingExportFolderDesc: "图谱首页、研究简报、节点对话和 Canvas 会导出到这里。",
   settingTabName: "使用 Tab 创建分支",
   settingTabDesc: "聚焦图谱画布时，Tab 会创建分支；在 AI 回复中选中文字后按 Tab，会从该文本创建分支。",
-  settingParentContextName: "携带上级上下文",
-  settingParentContextDesc: "分支请求会携带上级标题、总结和选中的原文锚点。",
-  settingFullContextName: "全图谱上下文",
-  settingFullContextDesc: "开启后 AI 请求会携带图谱中其他节点的对话记录作为参考，消耗更多 token。",
   settingStreamName: "流式输出",
   settingStreamDesc: "开启后 AI 回复会边生成边显示。",
   settingAutoSummaryName: "自动总结节点",
@@ -390,7 +372,6 @@ const en: TranslationDictionary = {
   cancel: "Cancel",
   newMapCommand: "New Spider map",
   switchMapCommand: "Switch Spider map",
-  viewNotReady: "Spider is not ready yet.",
   defaultMapTitle: "Untitled chat map",
   rootQuestionTitle: "Root question",
   untitledQuestionTitle: "Untitled question",
@@ -399,7 +380,6 @@ const en: TranslationDictionary = {
   mapNameLabel: "Map",
   currentNodeLabel: "Current node",
   selectedSourceHint: "Selected from the parent branch",
-  branchSource: "Source text",
   nodeSummaryLabel: "Summary",
   cardNoteLabel: "Quick note",
   nodeNote: "My note",
@@ -411,7 +391,6 @@ const en: TranslationDictionary = {
   noteSaved: "Autosaved",
   closeNodeNote: "Close node note",
   hasAnchorText: "Has source",
-  hasAiSummary: "Has AI summary",
   autoLayout: "Auto layout",
   layout: "Layout",
   export: "Export",
@@ -435,26 +414,27 @@ const en: TranslationDictionary = {
   noMessagesYet: "No messages yet",
   updatedAt: "Updated {time}",
   rootNode: "Root node",
-  childOf: "Child of {title}",
   anchor: "Source text",
   summary: "Summary",
   parent: "Go to parent",
   summarize: "Summarize",
-  markUnderstood: "Mark understood",
   statusOpen: "Open",
   statusUnderstood: "Understood",
   statusArchived: "Archived",
-  nodeMessages: "Node messages",
   streaming: "Generating",
   emptyHint: "Start with a question. After AI replies, select a useful passage and press Tab to create a branch.",
-  composerPlaceholder: "Ask a question in this branch. Enter sends; Shift + Enter adds a line.",
+  composerPlaceholder: "Ask a question in this branch…",
+  thinkingToggle: "Deep thinking",
+  thinkingToggleHint: "Let the model reason before it answers.",
+  composerHint: "Enter sends · Shift + Enter for a new line",
+  thinkingStyleLabel: "Thinking parameter",
+  thinkingStyleDesc: "How the deep-thinking switch is sent to this endpoint. Automatic detects it from the API address; unknown endpoints send nothing.",
   send: "Send",
   stop: "Stop",
   retry: "Retry",
   retryUnavailable: "Retry is available after the latest user message fails.",
   exported: "Exported to {path}",
   apiTest: "Test API",
-  apiTestDesc: "Verify the current endpoint, API key, and model.",
   apiTesting: "Testing...",
   apiTestSuccess: "API configuration works and the model responded.",
   apiTestFailed: "API test failed. Check details.",
@@ -499,7 +479,6 @@ const en: TranslationDictionary = {
   contextParent: "Add the previous node's key points",
   contextAncestors: "Add all previous nodes on this path",
   contextWhole: "Add the entire map",
-  currentSendOnly: "This send only",
   sendOptionsTitle: "Next question settings",
   sendOptionsForNode: "Configure the next question for “{title}”. Defaults return after sending.",
   defaultModelOption: "Default model",
@@ -507,9 +486,15 @@ const en: TranslationDictionary = {
   nodeSettingsHint: "Right click a node for its actions",
   editNodeSummary: "Edit node summary",
   summaryPlaceholder: "Edit this summary. Markdown is supported.",
-  interactiveExport: "Export as HTML",
-  interactiveExported: "Interactive HTML exported: {path}",
-  interactiveExportFailed: "HTML export failed: {message}",
+  exportChooseTitle: "Choose an export format",
+  exportPackageName: "Full research package",
+  exportPackageDesc: "A folder with an entry note, research brief, one Markdown file per node, an editable Canvas, and an SVG graph.",
+  exportInteractiveName: "Interactive HTML",
+  exportInteractiveDesc: "One offline file with search, replay, and theme switching. Easy to share.",
+  exportMarkdownName: "Single Markdown",
+  exportMarkdownDesc: "The whole map as one file with a table of contents; nodes link to each other by heading.",
+  exportMermaidName: "Mermaid mindmap",
+  exportMermaidDesc: "A Mermaid mindmap block you can paste into any note.",
   replay: "Replay",
   replayMode: "Replay order",
   replayTime: "Time",
@@ -519,7 +504,6 @@ const en: TranslationDictionary = {
   previousStep: "Previous step",
   nextStep: "Next step",
   replaySpeed: "Speed",
-  restoreGraph: "Restore graph",
   replayProgress: "Node {current} of {total}",
   replayIdle: "Showing the full graph",
   exitReplay: "Exit replay",
@@ -536,25 +520,14 @@ const en: TranslationDictionary = {
   generationError: "Generation failed",
   branchDirectionBadge: "Direction",
   branchModelBadge: "Model",
-  sourceReference: "Source",
   missingSource: "Source node is missing",
   settingsTitle: "Spider",
   settingLanguageName: "Interface language",
   settingLanguageDesc: "Switch the plugin interface language. All open Spider views update immediately.",
-  settingApiBaseUrlName: "API base URL",
-  settingApiBaseUrlDesc: "OpenAI-compatible chat completions base URL.",
-  settingApiKeyName: "API key",
-  settingApiKeyDesc: "Stored in Obsidian plugin data on this device.",
-  settingModelName: "Model",
-  settingModelDesc: "Any model accepted by your OpenAI-compatible endpoint.",
   settingExportFolderName: "Default export folder",
   settingExportFolderDesc: "The map index, research brief, node conversations, and Canvas are exported here.",
   settingTabName: "Use Tab to create branches",
   settingTabDesc: "When the map canvas is focused, Tab creates a branch. Selecting text in an AI response and pressing Tab branches from that text.",
-  settingParentContextName: "Include parent context",
-  settingParentContextDesc: "Send the parent title, summary, and selected source text with branch requests.",
-  settingFullContextName: "Full map context",
-  settingFullContextDesc: "Include other nodes' conversations in AI requests for full context. Uses more tokens.",
   settingStreamName: "Stream responses",
   settingStreamDesc: "Show AI responses as they are generated.",
   settingAutoSummaryName: "Auto-summarize nodes",
@@ -630,6 +603,14 @@ export function nodeStatsLabel(language: AppLanguage, messages: number, children
   return language === "zh-CN"
     ? `${messages} 条消息 · ${children} 个子节点`
     : `${englishCount(messages, "message", "messages")} · ${englishCount(children, "branch", "branches")}`;
+}
+
+export function reasoningSummaryLabel(language: AppLanguage, chars: number, streaming: boolean): string {
+  const count = chars.toLocaleString(language);
+  if (language === "zh-CN") {
+    return streaming ? `思考中… ${count} 字` : `思考过程 · ${count} 字`;
+  }
+  return streaming ? `Thinking… ${count} chars` : `Thinking · ${count} chars`;
 }
 
 export function confirmDeleteSubtreeLabel(language: AppLanguage, count: number): string {

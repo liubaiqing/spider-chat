@@ -1,11 +1,19 @@
 import { requestUrl } from "obsidian";
 import type { AiChatRequest, AiProvider, AppLanguage, BranchChatMapSettings, ChatMessage, ChatNode, ModelProfile } from "../types";
-import { normalizeApiBaseUrl } from "../settingsDefaults";
+import { normalizeApiBaseUrl, resolveThinkingStyle } from "../settingsDefaults";
 import { t } from "../i18n";
+
+/** Reasoning models disagree on the field name, so every known spelling is read. */
+interface ReasoningFields {
+  reasoning_content?: unknown;
+  reasoning?: unknown;
+  thinking?: unknown;
+  reasoning_details?: unknown;
+}
 
 interface ChatCompletionResponse {
   choices?: Array<{
-    message?: {
+    message?: ReasoningFields & {
       content?: string;
     };
   }>;
@@ -13,10 +21,60 @@ interface ChatCompletionResponse {
 
 interface ChatCompletionChunk {
   choices?: Array<{
-    delta?: {
+    delta?: ReasoningFields & {
       content?: string;
     };
   }>;
+}
+
+/**
+ * Map the deep-thinking switch onto the endpoint's own parameter shape. Endpoints we
+ * cannot identify send nothing, so the request stays valid for strict servers.
+ */
+function thinkingBody(profile: ModelProfile | undefined, thinking: boolean | undefined): Record<string, unknown> {
+  if (thinking === undefined) {
+    return {};
+  }
+  switch (resolveThinkingStyle(profile)) {
+    case "thinking":
+      return { thinking: { type: thinking ? "enabled" : "disabled" } };
+    case "enable_thinking":
+      return { enable_thinking: thinking };
+    case "reasoning":
+      return { reasoning: { enabled: thinking } };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Read chain-of-thought text from a streamed delta or a complete message.
+ * DeepSeek/Qwen/Moonshot use `reasoning_content`, OpenRouter uses `reasoning` or an
+ * array in `reasoning_details`, and some gateways use `thinking`.
+ */
+function readReasoning(value: ReasoningFields | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  for (const field of [value.reasoning_content, value.reasoning, value.thinking]) {
+    if (typeof field === "string" && field) {
+      return field;
+    }
+  }
+
+  if (Array.isArray(value.reasoning_details)) {
+    const joined = value.reasoning_details
+      .map((detail) => detail && typeof detail === "object" && typeof (detail as { text?: unknown }).text === "string"
+        ? (detail as { text: string }).text
+        : "")
+      .join("");
+    if (joined) {
+      return joined;
+    }
+  }
+
+  return undefined;
 }
 
 interface ModelListResponse {
@@ -109,6 +167,7 @@ function fitConversationBudget(
   contextMessages: ChatMessage[],
   nodeMessages: ChatMessage[],
   maxChars: number,
+  protectLatestUserPrompt = true,
 ): ChatMessage[] {
   let remaining = Math.max(0, Math.floor(maxChars));
   const orderedMessages = [...customInstructions, ...contextMessages, ...nodeMessages];
@@ -116,10 +175,14 @@ function fitConversationBudget(
     return orderedMessages;
   }
 
-  // Protect the latest user prompt, then custom instructions, then recent node
-  // history and map context. Fixed language guidance is outside this budget.
+  // By default protect the latest user prompt, then custom instructions, then recent
+  // node history and map context. Auxiliary calls opt out so that their newest turn
+  // survives even when the latest prompt is long. Fixed language guidance is outside
+  // this budget.
   const selected = new Map<number, ChatMessage>();
-  const latestUserIndex = findLastIndex(nodeMessages, (message) => message.role === "user");
+  const latestUserIndex = protectLatestUserPrompt
+    ? findLastIndex(nodeMessages, (message) => message.role === "user")
+    : -1;
   const take = (message: ChatMessage, index: number, keepTail = false): void => {
     if (remaining <= 0) {
       return;
@@ -179,7 +242,14 @@ export class OpenAICompatibleProvider implements AiProvider {
   }
 
   async chat(request: AiChatRequest): Promise<string> {
-    return this.requestChatCompletion(buildMessages(request, this.settings), request.model, request.signal, request.profile);
+    return this.requestChatCompletion(
+      buildMessages(request, this.settings),
+      request.model,
+      request.signal,
+      request.profile,
+      request.onReasoning,
+      thinkingBody(request.profile, request.thinking),
+    );
   }
 
   async *streamChat(request: AiChatRequest): AsyncGenerator<string> {
@@ -188,41 +258,59 @@ export class OpenAICompatibleProvider implements AiProvider {
       request.model,
       request.signal,
       request.profile,
+      request.onReasoning,
+      thinkingBody(request.profile, request.thinking),
     );
   }
 
   async summarizeNode(node: ChatNode, signal?: AbortSignal, profile?: ModelProfile): Promise<string> {
-    const messages: ChatMessage[] = [];
-    if (profile?.systemPrompt?.trim()) {
-      messages.push(systemMessage("system_profile_prompt", profile.systemPrompt.trim()));
-    }
-    messages.push(
-      systemMessage(
-        "system_summary",
-        this.settings.language === "zh-CN"
-          ? "用一句简洁的简体中文总结这个对话节点。只返回总结本身。"
-          : "Summarize this chat node in one concise sentence. Return only the summary.",
-      ),
-      ...node.messages,
+    return this.requestAuxiliaryCompletion(
+      "system_summary",
+      this.settings.language === "zh-CN"
+        ? "用一句简洁的简体中文总结这个对话节点。只返回总结本身。"
+        : "Summarize this chat node in one concise sentence. Return only the summary.",
+      node,
+      signal,
+      profile,
     );
-
-    return this.requestChatCompletion(messages, profile?.model ?? this.settings.model, signal, profile);
   }
 
   async titleNode(node: ChatNode, signal?: AbortSignal, profile?: ModelProfile): Promise<string> {
-    const messages: ChatMessage[] = [];
-    if (profile?.systemPrompt?.trim()) {
-      messages.push(systemMessage("system_profile_prompt", profile.systemPrompt.trim()));
-    }
-    messages.push(
-      systemMessage(
-        "system_title",
-        this.settings.language === "zh-CN"
-          ? "为这个对话节点生成一个简短中文标题。只返回标题，不要解释，不要引号，不要句号，不超过 8 个字。"
-          : "Create a short title for this chat node. Return only the title, no quotes, no period, under 8 words.",
-      ),
-      ...node.messages,
+    return this.requestAuxiliaryCompletion(
+      "system_title",
+      this.settings.language === "zh-CN"
+        ? "为这个对话节点生成一个简短中文标题。只返回标题，不要解释，不要引号，不要句号，不超过 8 个字。"
+        : "Create a short title for this chat node. Return only the title, no quotes, no period, under 8 words.",
+      node,
+      signal,
+      profile,
     );
+  }
+
+  /**
+   * Summaries and titles are auxiliary requests, so they follow the configured
+   * context budget instead of sending the whole node history. Their instruction is
+   * reserved outside that budget, and stored system messages are dropped because
+   * they would sit after the instruction and could override it.
+   */
+  private async requestAuxiliaryCompletion(
+    instructionId: string,
+    instruction: string,
+    node: ChatNode,
+    signal?: AbortSignal,
+    profile?: ModelProfile,
+  ): Promise<string> {
+    const instructions: ChatMessage[] = [];
+    if (profile?.systemPrompt?.trim()) {
+      instructions.push(systemMessage("system_profile_prompt", profile.systemPrompt.trim()));
+    }
+    instructions.push(systemMessage(instructionId, instruction));
+
+    const reservedChars = instructions.reduce((total, message) => total + message.content.length, 0);
+    const historyBudget = Math.max(0, Math.floor(this.settings.maxContextChars ?? 12000) - reservedChars);
+    const history = node.messages.filter((message) => message.role !== "system");
+    // Newest first: a summary describes the latest exchange, not the oldest content.
+    const messages = [...instructions, ...fitConversationBudget([], [], history, historyBudget, false)];
 
     return this.requestChatCompletion(messages, profile?.model ?? this.settings.model, signal, profile);
   }
@@ -265,7 +353,7 @@ export class OpenAICompatibleProvider implements AiProvider {
     }
   }
 
-  async listModels(profile?: ModelProfile, signal?: AbortSignal): Promise<string[]> {
+  async listModels(profile?: ModelProfile): Promise<string[]> {
     const config = this.getRequestConfig(profile?.model ?? this.settings.model, profile);
     if (!config.baseUrl) {
       throw new AiRequestError(t(this.settings.language, "missingApiBaseUrl"));
@@ -297,6 +385,8 @@ export class OpenAICompatibleProvider implements AiProvider {
     model: string,
     signal?: AbortSignal,
     profile?: ModelProfile,
+    onReasoning?: (text: string) => void,
+    bodyExtras: Record<string, unknown> = {},
   ): Promise<string> {
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
@@ -309,6 +399,10 @@ export class OpenAICompatibleProvider implements AiProvider {
     if (!config.baseUrl) {
       throw new AiRequestError(t(this.settings.language, "missingApiBaseUrl"));
     }
+
+    // requestUrl cannot be aborted once started, but a cancelled request can still be
+    // stopped from ever leaving the client.
+    signal?.throwIfAborted();
 
     const response = await requestUrl({
       url: `${config.baseUrl}/chat/completions`,
@@ -326,6 +420,7 @@ export class OpenAICompatibleProvider implements AiProvider {
         stream: false,
         ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
         ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
+        ...bodyExtras,
       }),
       throw: false,
     });
@@ -339,7 +434,13 @@ export class OpenAICompatibleProvider implements AiProvider {
     }
 
     const data = response.json as ChatCompletionResponse;
-    const content = data.choices?.[0]?.message?.content?.trim();
+    const message = data.choices?.[0]?.message;
+    const content = message?.content?.trim();
+
+    const reasoning = readReasoning(message)?.trim();
+    if (reasoning) {
+      onReasoning?.(reasoning);
+    }
 
     if (!content) {
       throw new AiRequestError(t(this.settings.language, "emptyAiResponse"));
@@ -353,6 +454,8 @@ export class OpenAICompatibleProvider implements AiProvider {
     model: string,
     signal?: AbortSignal,
     profile?: ModelProfile,
+    onReasoning?: (text: string) => void,
+    bodyExtras: Record<string, unknown> = {},
   ): AsyncGenerator<string> {
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
@@ -385,6 +488,7 @@ export class OpenAICompatibleProvider implements AiProvider {
         stream: true,
         ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
         ...(config.maxTokens === undefined ? {} : { max_tokens: config.maxTokens }),
+        ...bodyExtras,
       }),
       signal,
     });
@@ -425,6 +529,20 @@ export class OpenAICompatibleProvider implements AiProvider {
       return readyContent;
     };
 
+    let emittedReasoning = false;
+    const pushReasoning = (text: string): void => {
+      if (!onReasoning) {
+        return;
+      }
+      // A leading blank line from the first reasoning delta would render as an empty gap.
+      const nextText = emittedReasoning ? text : text.replace(/^\s+/, "");
+      if (!nextText) {
+        return;
+      }
+      emittedReasoning = true;
+      onReasoning(nextText);
+    };
+
     try {
       while (true) {
         const { value, done } = await reader.read();
@@ -448,12 +566,17 @@ export class OpenAICompatibleProvider implements AiProvider {
           }
 
           const chunk = JSON.parse(payload) as ChatCompletionChunk;
-          const content = chunk.choices?.[0]?.delta?.content;
-          if (content) {
-            const readyContent = prepareStreamContent(content);
+          const delta = chunk.choices?.[0]?.delta;
+          if (delta?.content) {
+            const readyContent = prepareStreamContent(delta.content);
             if (readyContent) {
               yield readyContent;
             }
+          }
+
+          const reasoning = readReasoning(delta);
+          if (reasoning) {
+            pushReasoning(reasoning);
           }
         }
       }
@@ -464,12 +587,17 @@ export class OpenAICompatibleProvider implements AiProvider {
         const payload = finalLine.slice(5).trim();
         if (payload && payload !== "[DONE]") {
           const chunk = JSON.parse(payload) as ChatCompletionChunk;
-          const content = chunk.choices?.[0]?.delta?.content;
-          if (content) {
-            const readyContent = prepareStreamContent(content);
+          const delta = chunk.choices?.[0]?.delta;
+          if (delta?.content) {
+            const readyContent = prepareStreamContent(delta.content);
             if (readyContent) {
               yield readyContent;
             }
+          }
+
+          const reasoning = readReasoning(delta);
+          if (reasoning) {
+            pushReasoning(reasoning);
           }
         }
       }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Notice } from "obsidian";
 import type BranchChatMapPlugin from "../main";
-import { confirmDeleteSubtreeLabel, displayTitle, t } from "../i18n";
+import { confirmDeleteSubtreeLabel, t } from "../i18n";
 import { NodeDetails } from "./NodeDetails";
 import type { BranchChatMapController } from "./BranchChatMapApp";
 import { confirmAction, confirmDelete } from "./ConfirmModal";
@@ -12,8 +12,7 @@ import { openPluginSettings } from "./openPluginSettings";
 import { getMissingAiConfiguration } from "../settingsDefaults";
 import type { BranchSource, ContextMode } from "../types";
 import { getMessageSelection } from "./messageSelection";
-import { writeInteractiveHtmlExport } from "./exportInteractiveHtml";
-import { NodeSendOptionsModal } from "./NodeSendOptionsModal";
+import { openExportPicker } from "./ExportFormatModal";
 
 interface BranchChatMapChatAppProps {
   plugin: BranchChatMapPlugin;
@@ -23,7 +22,7 @@ interface BranchChatMapChatAppProps {
 export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChatAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = useActiveViewState(plugin);
-  const { map, activeNodeId, drafts, error, errorDetails, focusToken, pendingNodeId, streamingMessages, generationJobs } = state;
+  const { map, activeNodeId, drafts, error, errorDetails, pendingNodeId, streamingMessages, generationJobs } = state;
   const node = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const settings = usePluginSettings(plugin);
   const language = settings.language;
@@ -66,16 +65,12 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
     [language, viewState],
   );
 
-  const exportInteractive = useCallback(async () => {
-    if (!map) return;
-    try {
-      const path = await writeInteractiveHtmlExport(plugin.app, map, settings.defaultExportFolder, language);
-      new Notice(t(language, "interactiveExported", { path }));
-    } catch (exportError: unknown) {
-      const message = exportError instanceof Error ? exportError.message : String(exportError);
-      new Notice(t(language, "interactiveExportFailed", { message }));
-    }
-  }, [language, map, plugin.app, settings.defaultExportFolder]);
+  const exportMap = useCallback(() => {
+    if (!viewState) return;
+    openExportPicker(plugin.app, language, (format) => {
+      void viewState.exportMapAs(format);
+    });
+  }, [language, plugin.app, viewState]);
 
   const handleDeleteCurrentMap = useCallback(async () => {
     const target = viewState?.getSnapshot().map;
@@ -251,7 +246,6 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         draft={drafts[node.id] ?? ""}
         error={error}
         errorDetails={errorDetails}
-        focusToken={focusToken}
         isPending={pendingNodeId === node.id}
         canUseAi={!getMissingAiConfiguration(settings)}
         tabBranchEnabled={settings.useTabToCreateChildNodes}
@@ -264,11 +258,10 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         onboardingVariant={onboardingVariant}
         streamingMessage={streamingMessages[node.id]}
         onCancel={(nodeId) => vs?.cancelGeneration(nodeId)}
-        onExportInteractive={() => { void exportInteractive(); }}
+        onExport={exportMap}
         onCreateChild={createChild}
         onDismissOnboarding={dismissOnboarding}
         onDraftChange={(value) => vs?.updateDraft(node.id, value)}
-        onMarkUnderstood={() => vs?.markUnderstood()}
         onOpenSettings={() => {
           if (!openPluginSettings(plugin.app, plugin.manifest.id)) {
             new Notice(t(language, "openSettingsFailed"));
@@ -278,15 +271,11 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         onRetry={(nodeId) => void vs?.retryAssistant(nodeId)}
         onSend={(options) => void vs?.sendMessage(options, node.id)}
         onSendOptionsChange={(options) => vs?.updateSendOptions(node.id, options)}
-        onOpenSendOptions={() => {
-          new NodeSendOptionsModal(plugin.app, {
-            node,
-            language,
-            models: settings.models ?? [],
-            defaults: { profileId: node.defaultModelProfileId ?? settings.defaultModelProfileId, contextMode: defaultContextMode },
-            current: state.sendOptions[node.id] ?? {},
-            onApply: (options) => vs?.updateSendOptions(node.id, options),
-          }).open();
+        onProfileChange={(profileId) => {
+          // Switching the model in the composer changes this node's default, which is
+          // what children inherit, and clears any earlier one-off override.
+          vs?.updateNodeDefaultProfile(node.id, profileId);
+          vs?.updateSendOptions(node.id, { profileId: undefined });
         }}
         onStatusChange={(status) => vs?.updateCurrentNodeStatus(status)}
         onTitleChange={(title) => vs?.updateCurrentNodeTitle(title)}

@@ -15,7 +15,6 @@ const INITIAL_STATE: BranchChatMapState = {
   streamingMessages: {},
   error: null,
   errorDetails: null,
-  focusToken: 0,
   hasManualPositions: false,
 };
 

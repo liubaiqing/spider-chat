@@ -1,7 +1,40 @@
-import type { AppLanguage, BranchChatMapSettings, ContextMode, ModelProfile } from "./types";
+import type { AppLanguage, BranchChatMapSettings, ContextMode, ModelProfile, ThinkingParamStyle } from "./types";
 import { DEFAULT_EXPORT_DIR } from "./constants";
 
 export type MissingAiConfiguration = "apiBaseUrl" | "apiKey" | "model";
+
+/**
+ * Endpoints whose OpenAI-compatible thinking switch is known. Everything else stays
+ * on "none", because a strict server (OpenAI itself, for one) rejects unknown
+ * request fields instead of ignoring them.
+ */
+const THINKING_STYLE_HOSTS: ReadonlyArray<{ host: RegExp; style: ThinkingParamStyle }> = [
+  { host: /(^|\.)deepseek\.com$/i, style: "thinking" },
+  { host: /(^|\.)volces\.com$/i, style: "thinking" },
+  { host: /(^|\.)aliyuncs\.com$/i, style: "enable_thinking" },
+  { host: /(^|\.)siliconflow\.(com|cn)$/i, style: "enable_thinking" },
+  { host: /(^|\.)openrouter\.ai$/i, style: "reasoning" },
+];
+
+/** Pick a thinking switch from the endpoint host, or "none" when it is unknown. */
+export function detectThinkingStyle(baseUrl: string): ThinkingParamStyle {
+  let host = "";
+  try {
+    host = new URL(baseUrl).hostname;
+  } catch {
+    return "none";
+  }
+  return THINKING_STYLE_HOSTS.find((entry) => entry.host.test(host))?.style ?? "none";
+}
+
+/** Resolve the effective switch: an explicit profile choice wins over detection. */
+export function resolveThinkingStyle(profile?: ModelProfile | null): ThinkingParamStyle {
+  const configured = profile?.thinkingParamStyle;
+  if (configured && configured !== "auto") {
+    return configured;
+  }
+  return detectThinkingStyle(profile?.baseUrl ?? "");
+}
 
 export const DEFAULT_MODEL_PROFILE_ID = "default";
 
@@ -156,8 +189,7 @@ function normalizeModelProfile(profile: ModelProfile, index: number, legacy: Mod
     systemPrompt: typeof profile.systemPrompt === "string" ? profile.systemPrompt : undefined,
     temperature: finiteNumber(profile.temperature),
     maxTokens: positiveIntegerOptional(profile.maxTokens),
-    color: cleanString(profile.color) || undefined,
-    icon: cleanString(profile.icon) || undefined,
+    thinkingParamStyle: isThinkingParamStyle(profile.thinkingParamStyle) ? profile.thinkingParamStyle : undefined,
   };
 }
 
@@ -167,6 +199,11 @@ function isModelProfile(value: unknown): value is ModelProfile {
   }
   const profile = value as Partial<ModelProfile>;
   return typeof profile.id === "string";
+}
+
+function isThinkingParamStyle(value: unknown): value is ThinkingParamStyle {
+  return value === "auto" || value === "none" || value === "thinking"
+    || value === "enable_thinking" || value === "reasoning";
 }
 
 function isContextMode(value: unknown): value is ContextMode {

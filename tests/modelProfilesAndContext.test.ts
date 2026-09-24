@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMessage, createNode, createRootMap, addChildNode, appendMessage, updateNode } from "../src/domain/chatMap";
+import { createMessage, createRootMap, addChildNode, appendMessage, updateNode } from "../src/domain/chatMap";
 import { buildContextMessages } from "../src/ai/contextBuilder";
 import { parseDotEnv, resolveProfileApiKey } from "../src/ai/profileKeys";
 import { createDefaultSettings, normalizeSettings } from "../src/settingsDefaults";

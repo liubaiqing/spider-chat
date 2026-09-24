@@ -33,7 +33,8 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     isString(value.content) &&
     isString(value.createdAt) &&
     (value.modelSnapshot === undefined || (isRecord(value.modelSnapshot) && isString(value.modelSnapshot.profileId) && isString(value.modelSnapshot.alias) && isString(value.modelSnapshot.model))) &&
-    (value.state === undefined || value.state === "complete" || value.state === "stopped")
+    (value.state === undefined || value.state === "complete" || value.state === "stopped") &&
+    (value.reasoning === undefined || isString(value.reasoning))
   );
 }
 

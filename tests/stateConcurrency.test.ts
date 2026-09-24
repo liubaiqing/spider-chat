@@ -93,7 +93,7 @@ describe("shared map state and generation scheduling", () => {
     try {
       firstView.updateNodeNote(map.rootNodeId, "first view edit");
       await firstWriteStarted.promise;
-      secondView.markUnderstood();
+      secondView.updateCurrentNodeStatus("understood");
       expect(firstView.getSnapshot().map?.nodes[map.rootNodeId]?.status).toBe("understood");
       expect(secondView.getSnapshot().map?.nodes[map.rootNodeId]?.note).toBe("first view edit");
 

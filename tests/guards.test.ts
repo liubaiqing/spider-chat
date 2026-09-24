@@ -54,4 +54,16 @@ describe("domain guards", () => {
     expect(isChatNode({ ...enriched, mergeSources: [{ nodeId: 1, titleSnapshot: "Source" }] })).toBe(false);
     expect(isChatNode({ ...enriched, messages: [{ ...enriched.messages[0], modelSnapshot: { profileId: "profile-1" } }] })).toBe(false);
   });
+
+  it("accepts stored reasoning text but rejects other types", () => {
+    const map = createRootMap("Reasoning compatibility");
+    const root = map.nodes[map.rootNodeId];
+    const message = { id: "assistant-1", role: "assistant", content: "Answer", createdAt: new Date().toISOString() };
+
+    expect(isChatNode(root)).toBe(true);
+    expect(isChatNode({ ...root, messages: [message] })).toBe(true);
+    expect(isChatNode({ ...root, messages: [{ ...message, reasoning: "chain of thought" }] })).toBe(true);
+    expect(isChatNode({ ...root, messages: [{ ...message, reasoning: 7 }] })).toBe(false);
+    expect(isChatNode({ ...root, messages: [{ ...message, reasoning: null }] })).toBe(false);
+  });
 });

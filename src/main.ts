@@ -17,6 +17,8 @@ import { createRootMap } from "./domain/chatMap";
 import { applyDagreLayout } from "./domain/layout";
 import { updateLocalizedChrome, type LocalizedCommand } from "./localizedChrome";
 import { resolveProfileApiKey } from "./ai/profileKeys";
+import { openExportPicker } from "./ui/ExportFormatModal";
+import type { ViewState } from "./state/viewState";
 
 export default class BranchChatMapPlugin extends Plugin {
   settings: BranchChatMapSettings = DEFAULT_SETTINGS;
@@ -94,7 +96,15 @@ export default class BranchChatMapPlugin extends Plugin {
     this.addLocalizedCommand("exportMapCommand", {
       id: "export-current-map",
       callback: () => {
-        void this.store.getActiveSession()?.exportMap();
+        const session = this.store.getActiveSession();
+        if (session) {
+          this.openExportPicker(session);
+          return;
+        }
+        void this.activateView().then(() => {
+          const active = this.store.getActiveSession();
+          if (active) this.openExportPicker(active);
+        });
       },
     });
 
@@ -309,6 +319,12 @@ export default class BranchChatMapPlugin extends Plugin {
     // Keep our own reference because some Obsidian builds do not return the command object at runtime.
     this.addCommand(localizedCommand);
     this.localizedCommands.push({ command: localizedCommand, key });
+  }
+
+  private openExportPicker(session: ViewState): void {
+    openExportPicker(this.app, this.settings.language, (format) => {
+      void session.exportMapAs(format);
+    });
   }
 
   private updateLocalizedChrome(): void {

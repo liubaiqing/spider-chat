@@ -83,11 +83,7 @@ interface ExportLabels {
   children: string;
   conversation: string;
   createdAt: string;
-  dataPurpose: string;
-  dataReadmeTitle: string;
-  dataReadmeUsage: string;
   edgeCount: string;
-  exportedPackage: string;
   explorationPath: string;
   fileStructure: string;
   fullConversationHint: string;
@@ -97,16 +93,12 @@ interface ExportLabels {
   indexEntry: string;
   keyFindings: string;
   languageDepth(depth: number): string;
-  mapJson: string;
-  mapJsonDescription: string;
-  mermaid: string;
-  mermaidPreview: string;
-  mermaidTitleSuffix: string;
   missingSource: string;
   mergeSource: string;
   model: string;
   missingRoot: string;
   navigation: string;
+  tableOfContents: string;
   noChildren: string;
   noConversation: string;
   noParentRoot: string;
@@ -125,7 +117,6 @@ interface ExportLabels {
   sourceMessage: string;
   question: string;
   quickInfo: string;
-  rawData: string;
   researchBrief: string;
   readingRoute: string;
   rootQuestion: string;
@@ -152,11 +143,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       children: "Children",
       conversation: "Conversation",
       createdAt: "Created",
-      dataPurpose: "Use this file for backup, debugging, or future import support.",
-      dataReadmeTitle: "Structured data",
-      dataReadmeUsage: "The JSON file contains the complete local Spider map: nodes, edges, messages, positions, timestamps, and status values.",
       edgeCount: "Edge count",
-      exportedPackage: "spider export package",
       explorationPath: "Exploration path",
       fileStructure: "File structure",
       fullConversationHint: "Follow the arrows from left to right. Each card links to its complete notes and conversation.",
@@ -166,16 +153,12 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       indexEntry: "Obsidian entry note",
       keyFindings: "Key findings",
       languageDepth: (depth) => `Depth ${depth}`,
-      mapJson: "map.json",
-      mapJsonDescription: "Raw structured data",
-      mermaid: "Mermaid map",
-      mermaidPreview: "Mermaid preview",
-      mermaidTitleSuffix: "mindmap",
       missingSource: "missing source",
       mergeSource: "Merge source",
       model: "Model",
       missingRoot: "No root node found.",
       navigation: "Navigation",
+  tableOfContents: "Contents",
       noChildren: "No child nodes",
       noConversation: "No conversation yet",
       noParentRoot: "No parent; this is the root node",
@@ -194,7 +177,6 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
       sourceMessage: "Source message",
       question: "Question",
       quickInfo: "Quick info",
-      rawData: "Raw data",
       researchBrief: "Research brief",
       readingRoute: "Recommended reading route",
       rootQuestion: "Root question",
@@ -220,11 +202,7 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     children: "子节点",
     conversation: "对话记录",
     createdAt: "创建时间",
-    dataPurpose: "这个文件可用于备份、调试，以及未来的重新导入支持。",
-    dataReadmeTitle: "结构化数据",
-    dataReadmeUsage: "JSON 文件包含完整的本地 Spider 图谱：节点、连线、消息、位置、时间戳和状态。",
     edgeCount: "连线数量",
-    exportedPackage: "spider 导出包",
     explorationPath: "探索路径",
     fileStructure: "文件结构",
     fullConversationHint: "从左向右，沿箭头探索。点击卡片中的笔记链接，继续阅读完整对话。",
@@ -234,16 +212,12 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     indexEntry: "Obsidian 内的图谱首页",
     keyFindings: "关键结论",
     languageDepth: (depth) => `第 ${depth} 层`,
-    mapJson: "map.json",
-    mapJsonDescription: "原始结构化数据",
-    mermaid: "Mermaid 图",
-    mermaidPreview: "Mermaid 预览",
-    mermaidTitleSuffix: "思维导图",
     missingSource: "来源已删除",
     mergeSource: "合并来源",
     model: "模型",
     missingRoot: "缺少根节点",
     navigation: "导航",
+  tableOfContents: "目录",
     noChildren: "暂无",
     noConversation: "暂无对话",
     noParentRoot: "无，这是根节点",
@@ -262,7 +236,6 @@ function exportLabels(language: AppLanguage = "zh-CN"): ExportLabels {
     sourceMessage: "原始消息",
     question: "问题",
     quickInfo: "快速信息",
-    rawData: "原始数据",
     researchBrief: "研究简报",
     readingRoute: "推荐阅读路线",
     rootQuestion: "根问题",
@@ -559,6 +532,11 @@ function renderMessage(message: ChatMessage, labels: ExportLabels): string[] {
   ];
 }
 
+/** In-file heading link: Obsidian resolves [[#Heading]] inside the same note. */
+function headingLink(title: string): string {
+  return `[[#${title.replace(/[[\]|#^]/g, "").trim()}]]`;
+}
+
 function renderNodeMarkdown(
   map: ChatMap,
   node: ChatNode,
@@ -566,6 +544,8 @@ function renderNodeMarkdown(
   labels: ExportLabels,
   nodeFileNames?: ReadonlyMap<string, string>,
   modelProfiles: readonly ModelProfile[] = [],
+  /** Single-file exports link to headings in the same note, not to package files. */
+  standalone = false,
 ): string {
   const lines: string[] = [];
   const parent = node.parentId ? map.nodes[node.parentId] : undefined;
@@ -624,25 +604,35 @@ function renderNodeMarkdown(
   }
   lines.push("");
 
+  const parentLink = parent
+    ? standalone
+      ? headingLink(parent.title)
+      : parentFileName ? markdownLink(parent.title, parentFileName) : undefined
+    : undefined;
+
   lines.push(`## ${labels.navigation}`);
   lines.push("");
-  lines.push(`- ${labels.graphHome}: ${markdownLink(map.title, "../index.md")}`);
-  lines.push(`- ${labels.canvasView}: ${markdownLink("map.canvas", "../map.canvas")}`);
-  if (parent && parentFileName) {
-    lines.push(`- ${labels.parent}: ${markdownLink(parent.title, parentFileName)}`);
+  if (!standalone) {
+    // Standalone files have no sibling index/canvas files to point at.
+    lines.push(`- ${labels.graphHome}: ${markdownLink(map.title, "../index.md")}`);
+    lines.push(`- ${labels.canvasView}: ${markdownLink("map.canvas", "../map.canvas")}`);
+  }
+  if (parentLink) {
+    lines.push(`- ${labels.parent}: ${parentLink}`);
   } else {
     lines.push(`- ${labels.parent}: ${labels.noParentRoot}`);
   }
   const pathLinks = path.map((pathNode) => {
+    if (pathNode.id === node.id) return pathNode.title;
+    if (standalone) return headingLink(pathNode.title);
     const pathFileName = nodeFileNames?.get(pathNode.id);
-    return pathFileName && pathNode.id !== node.id ? markdownLink(pathNode.title, pathFileName) : pathNode.title;
+    return pathFileName ? markdownLink(pathNode.title, pathFileName) : pathNode.title;
   });
   lines.push(`- ${labels.explorationPath}: ${pathLinks.join(" / ")}`);
   if (children.length > 0) {
-    const childLinks = children.map((child) => {
-      const fileName = nodeFileNames?.get(child.id) ?? `${slugifyFileName(child.title)}.md`;
-      return markdownLink(child.title, fileName);
-    });
+    const childLinks = children.map((child) => standalone
+      ? headingLink(child.title)
+      : markdownLink(child.title, nodeFileNames?.get(child.id) ?? `${slugifyFileName(child.title)}.md`));
     lines.push(`- ${labels.children}: ${childLinks.join("、")}`);
   } else {
     lines.push(`- ${labels.children}: ${labels.noChildren}`);
@@ -656,7 +646,7 @@ function renderNodeMarkdown(
   lines.push(`- ${labels.createdAt}: ${formatDateTime(node.createdAt)}`);
   lines.push(`- ${labels.updatedAt}: ${formatDateTime(node.updatedAt)}`);
   if (parent) {
-    lines.push(`- ${labels.parent}: ${parentFileName ? markdownLink(parent.title, parentFileName) : parent.title}`);
+    lines.push(`- ${labels.parent}: ${parentLink ?? parent.title}`);
   }
   lines.push("");
 
@@ -677,7 +667,9 @@ function renderNodeMarkdown(
     lines.push("");
     for (const child of children) {
       const childFileName = nodeFileNames?.get(child.id);
-      const link = childFileName ? markdownLink(child.title, childFileName) : `[[${child.title}]]`;
+      const link = standalone
+        ? headingLink(child.title)
+        : childFileName ? markdownLink(child.title, childFileName) : `[[${child.title}]]`;
       lines.push(`- ${link}: ${nodeSummaryLine(child, labels)}`);
     }
     lines.push("");
@@ -693,8 +685,11 @@ export function exportMarkdown(map: ChatMap, language: AppLanguage = "zh-CN"): s
     return `# ${map.title}\n\n${labels.missingRoot}\n`;
   }
 
-  const sections = walkNodes(map).map((node) => renderNodeMarkdown(map, node, Math.min(depthOf(map, node) + 2, 6), labels));
-  return [`# ${map.title}`, "", ...sections].join("\n").trimEnd() + "\n";
+  const nodes = walkNodes(map);
+  const sections = nodes.map((node) =>
+    renderNodeMarkdown(map, node, Math.min(depthOf(map, node) + 2, 6), labels, undefined, [], true));
+  const contents = nodes.map((node) => `${"  ".repeat(depthOf(map, node))}- ${headingLink(node.title)}`);
+  return [`# ${map.title}`, "", `## ${labels.tableOfContents}`, "", ...contents, "", ...sections].join("\n").trimEnd() + "\n";
 }
 
 function renderMermaidNode(map: ChatMap, node: ChatNode, depth: number): string[] {

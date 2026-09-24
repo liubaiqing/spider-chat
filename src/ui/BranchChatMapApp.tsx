@@ -13,7 +13,7 @@ import type { ViewState } from "../state/viewState";
 import type { ChatMapId, NodeId } from "../types";
 import { getSelectionInside, shouldCreateBranchFromTab, shouldGoToParentFromShiftTab, shouldHandleCanvasNavigation } from "./keyboardShortcuts";
 import { SearchResultItem } from "./SearchResultItem";
-import { writeInteractiveHtmlExport } from "./exportInteractiveHtml";
+import { openExportPicker } from "./ExportFormatModal";
 import { NodeSendOptionsModal } from "./NodeSendOptionsModal";
 import { getMissingAiConfiguration } from "../settingsDefaults";
 
@@ -71,16 +71,11 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     onLoadMap(mapId);
   }, [onLoadMap]);
 
-  const handleExportInteractive = useCallback(async () => {
-    if (!map) return;
-    try {
-      const path = await writeInteractiveHtmlExport(plugin.app, map, settings.defaultExportFolder, language);
-      new Notice(t(language, "interactiveExported", { path }));
-    } catch (exportError: unknown) {
-      const message = exportError instanceof Error ? exportError.message : String(exportError);
-      new Notice(t(language, "interactiveExportFailed", { message }));
-    }
-  }, [language, map, plugin.app, settings.defaultExportFolder]);
+  const handleExport = useCallback(() => {
+    openExportPicker(plugin.app, language, (format) => {
+      void viewState.exportMapAs(format);
+    });
+  }, [language, plugin.app, viewState]);
 
   const handleDeleteCurrentMap = useCallback(async () => {
     const target = viewState.getSnapshot().map;
@@ -382,7 +377,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
           <button className="bcm-topbar-btn" onClick={() => { void handleAutoLayout(); }} type="button" title={t(language, "autoLayout")}>
             {t(language, "layout")}
           </button>
-          <button className="bcm-topbar-btn" onClick={() => { void viewState.exportMap(); }} type="button" title={t(language, "export")}>
+          <button className="bcm-topbar-btn" onClick={handleExport} type="button" title={t(language, "export")}>
             {t(language, "export")}
           </button>
           <div className="bcm-more">
@@ -391,9 +386,6 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
             </button>
             {moreOpen ? (
               <div className="bcm-more-menu">
-                <button className="bcm-more-item" onClick={() => { setMoreOpen(false); void handleExportInteractive(); }} type="button">
-                  {t(language, "interactiveExport")}
-                </button>
                 <button className="bcm-more-item is-danger" onClick={() => { setMoreOpen(false); void handleDeleteCurrentMap(); }} type="button">
                   {t(language, "deleteMap")}
                 </button>

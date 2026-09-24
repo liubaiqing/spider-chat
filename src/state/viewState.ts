@@ -5,11 +5,12 @@ import { buildContextMessages } from "../ai/contextBuilder";
 import { createRootMap, addChildNode, appendMessage, createMessage, getAncestorPath, updateMapTitle, updateNode } from "../domain/chatMap";
 import { applyDagreLayout } from "../domain/layout";
 import { isSourceTextRange } from "../domain/guards";
-import { buildExportFiles } from "../export/exporters";
+import { buildExportFiles, exportMarkdown, exportMermaidMindmap } from "../export/exporters";
+import { writeInteractiveHtmlExport } from "../storage/interactiveHtmlExport";
 import { t } from "../i18n";
 import { MapRepository } from "../storage/mapRepository";
 import { MapDocumentRegistry, type GenerationJob, type MapDocument } from "./mapDocument";
-import type { BranchSource, BranchChatMapSettings, ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, ContextMode, ModelProfile, NodeId } from "../types";
+import type { BranchSource, BranchChatMapSettings, ChatMap, ChatMapId, ChatMessage, ChatNode, ChatNodeStatus, ContextMode, ExportFormat, ModelProfile, NodeId } from "../types";
 import { cleanText, slugifyFileName, truncateText } from "../utils/text";
 
 export interface BranchChatMapState {
@@ -24,13 +25,14 @@ export interface BranchChatMapState {
   generationQueue: NodeId[];
   error: string | null;
   errorDetails: string | null;
-  focusToken: number;
   hasManualPositions: boolean;
 }
 
 export interface NodeSendOptions {
   profileId?: string;
   contextMode?: ContextMode;
+  /** Deep-thinking switch for this node. Undefined leaves the endpoint default. */
+  thinking?: boolean;
 }
 
 const INITIAL_STATE: BranchChatMapState = {
@@ -45,7 +47,6 @@ const INITIAL_STATE: BranchChatMapState = {
   generationQueue: [],
   error: null,
   errorDetails: null,
-  focusToken: 0,
   hasManualPositions: false,
 };
 
@@ -142,7 +143,6 @@ export class ViewState {
     if (!createdChild) return;
     this.setState({
       activeNodeId: createdChild.id,
-      focusToken: this.state.focusToken + 1,
       drafts: selectedText
         ? {
             ...this.state.drafts,
@@ -162,7 +162,6 @@ export class ViewState {
 
     this.setState({
       activeNodeId: activeNode.parentId,
-      focusToken: this.state.focusToken + 1,
     });
   }
 
@@ -288,36 +287,64 @@ export class ViewState {
     return true;
   }
 
-  async exportMap(): Promise<void> {
+  /**
+   * Single entry point for every export format, so the graph toolbar, the chat
+   * sidebar, and the command all offer the same choices.
+   */
+  async exportMapAs(format: ExportFormat = "package"): Promise<void> {
     const { map } = this.state;
     if (!map) {
       return;
     }
 
+    const language = this.plugin.settings.language;
     try {
-      const exportMap = await this.prepareMapForExport(map);
-      const folder = await this.repository.createExportFolder(`${this.plugin.settings.defaultExportFolder}/${this.exportFolderName(exportMap)}`);
-      const files = buildExportFiles(exportMap, {
-        exportFolder: folder,
-        language: this.plugin.settings.language,
+      const prepared = await this.prepareMapForExport(map);
+      const folder = this.plugin.settings.defaultExportFolder;
+      const baseName = this.exportFolderName(prepared);
+
+      if (format === "interactive") {
+        const path = await writeInteractiveHtmlExport(this.plugin.app, prepared, folder, language);
+        new Notice(t(language, "exported", { path }));
+        return;
+      }
+
+      if (format === "markdown" || format === "mermaid") {
+        const path = await this.repository.writeExport(
+          folder,
+          format === "markdown" ? `${baseName}.md` : `${baseName}-mermaid.md`,
+          format === "markdown" ? exportMarkdown(prepared, language) : exportMermaidMindmap(prepared),
+        );
+        new Notice(t(language, "exported", { path }));
+        return;
+      }
+
+      const exportFolder = await this.repository.createExportFolder(`${folder}/${baseName}`);
+      const files = buildExportFiles(prepared, {
+        exportFolder,
+        language,
         modelProfiles: this.plugin.settings.models,
       });
       let entryPath = "";
 
       for (const file of files) {
-        const path = await this.repository.writeExport(folder, file.path, file.content);
+        const path = await this.repository.writeExport(exportFolder, file.path, file.content);
         if (file.path === "index.md") {
           entryPath = path;
         }
       }
 
-      new Notice(t(this.plugin.settings.language, "exported", { path: entryPath || folder }));
+      new Notice(t(language, "exported", { path: entryPath || exportFolder }));
     } catch (exportError: unknown) {
       this.reportError(exportError);
     }
   }
 
-  async sendMessage(options: { profileId?: string; contextMode?: ContextMode } = {}, targetNodeId?: NodeId): Promise<void> {
+  async exportMap(): Promise<void> {
+    return this.exportMapAs("package");
+  }
+
+  async sendMessage(options: { profileId?: string; contextMode?: ContextMode; thinking?: boolean } = {}, targetNodeId?: NodeId): Promise<void> {
     const { drafts } = this.state;
     const activeNodeId = targetNodeId ?? this.state.activeNodeId;
     const requestSettings = this.settingsSnapshot();
@@ -377,9 +404,10 @@ export class ViewState {
     }
 
     const contextMode = options.contextMode ?? requestSettings.contextMode;
+    const thinking = options.thinking ?? this.state.sendOptions[activeNodeId]?.thinking;
     document.setMaxConcurrent(requestSettings.maxConcurrentGenerations ?? 3);
     await document.enqueueGeneration(activeNodeId, profile.id, (controller) =>
-      this.generateAssistant(document, activeNodeId, profile, contextMode, requestSettings, controller));
+      this.generateAssistant(document, activeNodeId, profile, contextMode, thinking, requestSettings, controller));
   }
 
   async retryAssistant(nodeId: NodeId = this.state.activeNodeId ?? ""): Promise<void> {
@@ -421,6 +449,7 @@ export class ViewState {
     }
 
     const contextMode = requestSettings.contextMode;
+    const thinking = this.state.sendOptions[nodeId]?.thinking;
     document.setMaxConcurrent(requestSettings.maxConcurrentGenerations ?? 3);
     try {
       await document.persistCurrent();
@@ -431,7 +460,7 @@ export class ViewState {
       return;
     }
     await document.enqueueGeneration(nodeId, profile.id, (controller) =>
-      this.generateAssistant(document, nodeId, profile, contextMode, requestSettings, controller));
+      this.generateAssistant(document, nodeId, profile, contextMode, thinking, requestSettings, controller));
   }
 
   cancelGeneration(nodeId?: NodeId): void {
@@ -449,7 +478,21 @@ export class ViewState {
 
   updateSendOptions(nodeId: NodeId, options: NodeSendOptions): void {
     if (!this.state.map?.nodes[nodeId]) return;
-    this.setState({ sendOptions: { ...this.state.sendOptions, [nodeId]: options } });
+    // Merge so the composer can update one control without dropping the others.
+    this.setState({
+      sendOptions: {
+        ...this.state.sendOptions,
+        [nodeId]: { ...this.state.sendOptions[nodeId], ...options },
+      },
+    });
+  }
+
+  updateNodeDefaultProfile(nodeId: NodeId, profileId: string): void {
+    const cleanProfileId = profileId.trim();
+    if (!cleanProfileId) return;
+    this.commitMap((currentMap) => currentMap.nodes[nodeId]
+      ? updateNode(currentMap, nodeId, { defaultModelProfileId: cleanProfileId })
+      : currentMap);
   }
 
   updateCurrentNodeTitle(title: string): void {
@@ -465,10 +508,6 @@ export class ViewState {
       if (activeNodeId === currentMap.rootNodeId) nextMap = updateMapTitle(nextMap, cleanTitle);
       return nextMap;
     });
-  }
-
-  markUnderstood(): void {
-    this.updateCurrentNodeStatus("understood");
   }
 
   updateCurrentNodeStatus(status: ChatNodeStatus): void {
@@ -603,7 +642,6 @@ export class ViewState {
     this.setState({
       activeNodeId: nodeId,
       collapsedIds,
-      focusToken: this.state.focusToken + 1,
     });
   }
 
@@ -694,7 +732,6 @@ export class ViewState {
       generationQueue: [],
       error: null,
       errorDetails: null,
-      focusToken: resetUi ? 0 : this.state.focusToken,
       hasManualPositions: resetUi ? false : this.state.hasManualPositions,
     };
     this.syncDocument();
@@ -817,6 +854,7 @@ export class ViewState {
     nodeId: NodeId,
     profile: ModelProfile,
     contextMode: ContextMode | undefined,
+    thinking: boolean | undefined,
     requestSettings: BranchChatMapSettings,
     controller: AbortController,
   ): Promise<void> {
@@ -838,10 +876,15 @@ export class ViewState {
       return document.map.id === baseMap.id && document.map.nodes[nodeId]
         && snapshot.streamingMessages[nodeId]?.id === assistantMessage.id ? document.map : null;
     };
+    let reasoning = "";
     const publishStream = () => {
       streamUpdateTimer = undefined;
       if (controller.signal.aborted || !currentMap()) return;
-      document.setStreamingMessage(nodeId, { ...assistantMessage, content: answer });
+      document.setStreamingMessage(nodeId, {
+        ...assistantMessage,
+        content: answer,
+        reasoning: reasoning || undefined,
+      });
     };
 
     try {
@@ -861,7 +904,14 @@ export class ViewState {
         signal: controller.signal,
         profile,
         contextMode,
+        thinking,
         systemPromptOverride,
+        // Reasoning models report their thinking through this channel; it is batched
+        // with the answer so a burst of thinking does not re-render per delta.
+        onReasoning: (text: string) => {
+          reasoning += text;
+          streamUpdateTimer ??= setTimeout(publishStream, 32);
+        },
       };
 
       if (requestSettings.streamResponses) {
@@ -880,28 +930,41 @@ export class ViewState {
 
       controller.signal.throwIfAborted();
       answer = answer.trim();
+      const reasoningText = reasoning.trim();
       if (!currentMap()) return;
       document.commit((currentMapValue) => currentMapValue.nodes[nodeId]
-        ? appendMessage(currentMapValue, nodeId, { ...assistantMessage, content: answer, state: "complete" })
+        ? appendMessage(currentMapValue, nodeId, {
+            ...assistantMessage,
+            content: answer,
+            state: "complete",
+            reasoning: reasoningText || undefined,
+          })
         : currentMapValue);
 
       let latestMap = document.map;
       let updatedNode = latestMap.nodes[nodeId];
       if (requestSettings.autoSummarizeNodes && updatedNode) {
-        const summary = await provider.summarizeNode(updatedNode, controller.signal, profile);
-        controller.signal.throwIfAborted();
-        if (!currentMap()) return;
-        document.commit((currentMapValue) => {
-          const currentNode = currentMapValue.nodes[nodeId];
-          return currentNode && !currentNode.summaryEditedByUser
-            ? updateNode(currentMapValue, nodeId, { summary, summaryEditedByUser: false })
-            : currentMapValue;
-        });
+        // The answer is already saved. Summarizing is auxiliary, so a failure here
+        // must never mark the node as failed or discard the completed answer.
+        try {
+          const summary = await provider.summarizeNode(updatedNode, controller.signal, profile);
+          if (!controller.signal.aborted && currentMap()) {
+            document.commit((currentMapValue) => {
+              const currentNode = currentMapValue.nodes[nodeId];
+              return currentNode && !currentNode.summaryEditedByUser
+                ? updateNode(currentMapValue, nodeId, { summary, summaryEditedByUser: false })
+                : currentMapValue;
+            });
+          }
+        } catch {
+          // Ignored on purpose: the completed answer is the result that matters.
+        }
       }
 
       latestMap = document.map;
       updatedNode = latestMap.nodes[nodeId];
-      if (updatedNode && this.shouldAutoTitle(updatedNode, latestMap, requestSettings.language)) {
+      // Naming stays auxiliary too: no new request once the run was cancelled or the map is gone.
+      if (!controller.signal.aborted && currentMap() && updatedNode && this.shouldAutoTitle(updatedNode, latestMap, requestSettings.language)) {
         try {
           const titleNode = updatedNode;
           const title = this.normalizeGeneratedTitle(await provider.titleNode(titleNode, controller.signal, profile));
@@ -926,7 +989,12 @@ export class ViewState {
         if (partial && latestMap && !latestMap.nodes[nodeId]?.messages.some((message) => message.id === assistantMessage.id)) {
           document.commit((currentMapValue) => currentMapValue.nodes[nodeId]
             && !currentMapValue.nodes[nodeId]?.messages.some((message) => message.id === assistantMessage.id)
-            ? appendMessage(currentMapValue, nodeId, { ...assistantMessage, content: partial, state: "stopped" })
+            ? appendMessage(currentMapValue, nodeId, {
+                ...assistantMessage,
+                content: partial,
+                state: "stopped",
+                reasoning: reasoning.trim() || undefined,
+              })
             : currentMapValue);
           if (this.document === document) new Notice(t(requestSettings.language, "generationStoppedWithPartial"));
         }

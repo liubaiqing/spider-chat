@@ -15,6 +15,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
   private readonly attemptedModelFetch = new Set<string>();
   private isTestingProfileId: string | null = null;
   private isLoadingModelsProfileId: string | null = null;
+  private activePage: "general" | "models" | "conversation" = "general";
 
   constructor(app: App, plugin: BranchChatMapPlugin) {
     super(app, plugin);
@@ -25,8 +26,61 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const language = this.plugin.settings.language;
     containerEl.empty();
+    containerEl.addClass("spider-settings");
+    containerEl.createEl("div", {
+      cls: "spider-settings-title",
+      text: t(language, "settingsTitle"),
+      attr: { id: "spider-settings-heading", role: "heading", "aria-level": "1" },
+    });
 
-    new Setting(containerEl).setName(t(language, "settingsTitle")).setHeading();
+    const tabs = containerEl.createDiv({ cls: "spider-settings-tabs", attr: { role: "tablist", "aria-labelledby": "spider-settings-heading" } });
+    const pages = [
+      { id: "general", name: label(language, "通用", "General") },
+      { id: "models", name: label(language, "模型", "Models") },
+      { id: "conversation", name: label(language, "对话", "Conversation") },
+    ] as const;
+    for (const page of pages) {
+      const button = tabs.createEl("button", {
+        cls: `spider-settings-tab${this.activePage === page.id ? " is-active" : ""}`,
+        text: page.name,
+        type: "button",
+        attr: {
+          id: `spider-settings-tab-${page.id}`,
+          role: "tab",
+          "aria-selected": String(this.activePage === page.id),
+          "aria-controls": "spider-settings-panel",
+          tabindex: this.activePage === page.id ? "0" : "-1",
+        },
+      });
+      button.addEventListener("click", () => {
+        if (this.activePage === page.id) return;
+        this.activePage = page.id;
+        this.display();
+        containerEl.querySelector<HTMLButtonElement>(`#spider-settings-tab-${page.id}`)?.focus();
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const index = pages.findIndex((item) => item.id === page.id);
+        const next = pages[(index + (event.key === "ArrowRight" ? 1 : pages.length - 1)) % pages.length];
+        if (!next) return;
+        this.activePage = next.id;
+        this.display();
+        containerEl.querySelector<HTMLButtonElement>(`#spider-settings-tab-${next.id}`)?.focus();
+      });
+    }
+
+    const panel = containerEl.createDiv({
+      cls: "spider-settings-panel",
+      attr: { id: "spider-settings-panel", role: "tabpanel", "aria-labelledby": `spider-settings-tab-${this.activePage}` },
+    });
+    if (this.activePage === "general") this.renderGeneralPage(panel, language);
+    if (this.activePage === "models") this.renderModelsPage(panel, language);
+    if (this.activePage === "conversation") this.renderConversationPage(panel, language);
+  }
+
+  private renderGeneralPage(containerEl: HTMLElement, language: "zh-CN" | "en"): void {
+    this.addSectionHeader(containerEl, label(language, "界面", "Interface"));
 
     new Setting(containerEl)
       .setName(t(language, "settingLanguageName"))
@@ -42,44 +96,81 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           });
       });
 
-    new Setting(containerEl)
-      .setName(label(language, "模型配置", "Model profiles"))
-      .setDesc(label(
-        language,
-        "每个节点可以选择自己的模型配置。密钥按直接填写、插件目录 .env、库目录 .env、桌面环境变量的顺序读取。",
-        "Each node can use a profile. Keys are read from the profile first, then the plugin .env, vault .env, and desktop environment.",
-      ))
-      .setHeading();
-
-    const profiles = this.plugin.settings.models ?? [];
-    for (const profile of profiles) {
-      this.renderProfile(profile, profiles.length);
-    }
+    this.addSectionHeader(containerEl, label(language, "文件与图谱", "Files and map"));
 
     new Setting(containerEl)
-      .addButton((button) => {
-        button.setButtonText(label(language, "添加模型配置", "Add model profile")).onClick(async () => {
-          const defaultProfile = createDefaultModelProfile();
-          const id = `profile-${Date.now().toString(36)}`;
-          const profile: ModelProfile = {
-            ...defaultProfile,
-            id,
-            alias: label(language, `模型 ${profiles.length + 1}`, `Profile ${profiles.length + 1}`),
-            model: "",
-          };
-          await this.updateProfiles([...(this.plugin.settings.models ?? []), profile]);
-          this.display();
-        });
+      .setName(t(language, "settingExportFolderName"))
+      .setDesc(t(language, "settingExportFolderDesc"))
+      .addText((text) => {
+        text
+          .setPlaceholder(DEFAULT_EXPORT_DIR)
+          .setValue(this.plugin.settings.defaultExportFolder)
+          .onChange(async (value) => {
+            await this.plugin.updateSettings({ defaultExportFolder: value.trim() || DEFAULT_EXPORT_DIR });
+          });
       });
 
     new Setting(containerEl)
-      .setName(label(language, "对话上下文", "Conversation context"))
-      .setDesc(label(
+      .setName(t(language, "settingTabName"))
+      .setDesc(t(language, "settingTabDesc"))
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.useTabToCreateChildNodes)
+          .onChange(async (value) => {
+            await this.plugin.updateSettings({ useTabToCreateChildNodes: value });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(t(language, "settingOnboardingName"))
+      .setDesc(t(language, "settingOnboardingDesc"))
+      .addButton((button) => {
+        button
+          .setButtonText(t(language, "settingOnboardingButton"))
+          .onClick(async () => {
+            await this.plugin.updateSettings({ onboardingCardDismissed: false });
+            window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: false } }));
+            new Notice(t(language, "settingOnboardingRestored"));
+          });
+      });
+  }
+
+  private renderModelsPage(containerEl: HTMLElement, language: "zh-CN" | "en"): void {
+    const header = this.addSectionHeader(
+      containerEl,
+      label(language, "模型配置", "Model profiles"),
+      label(language, "各节点可选不同模型。密钥会依次从此处、插件目录 .env、库目录 .env 和桌面环境变量读取。", "Nodes can use different models. Keys are resolved from this profile, the plugin .env, vault .env, then desktop environment."),
+    );
+
+    const profiles = this.plugin.settings.models ?? [];
+    const orderedProfiles = [...profiles].sort((first, second) =>
+      Number(second.id === this.plugin.settings.defaultModelProfileId) - Number(first.id === this.plugin.settings.defaultModelProfileId));
+    for (const profile of orderedProfiles) {
+      this.renderProfile(containerEl, profile, profiles.length);
+    }
+
+    const addButton = header.createEl("button", { cls: "spider-settings-add-model", type: "button", text: label(language, "+ 添加模型", "+ Add model") });
+    addButton.addEventListener("click", async () => {
+      const defaultProfile = createDefaultModelProfile();
+      const id = `profile-${Date.now().toString(36)}`;
+      const profile: ModelProfile = {
+        ...defaultProfile,
+        id,
+        alias: label(language, `模型 ${profiles.length + 1}`, `Profile ${profiles.length + 1}`),
+        model: "",
+      };
+      await this.updateProfiles([...(this.plugin.settings.models ?? []), profile]);
+      this.display();
+      this.containerEl.querySelector<HTMLElement>(`[data-profile-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  private renderConversationPage(containerEl: HTMLElement, language: "zh-CN" | "en"): void {
+    this.addSectionHeader(containerEl, label(language, "对话上下文", "Conversation context"), label(
         language,
         "控制发送给模型的图谱历史。字符上限包含配置提示词、图谱历史和当前节点消息，仅不包含固定语言提示词。",
         "Choose which map history is sent. The character limit covers profile prompts, map history, and current node messages; only the fixed language instruction is excluded.",
-      ))
-      .setHeading();
+    ));
 
     new Setting(containerEl)
       .setName(label(language, "上下文范围", "Context mode"))
@@ -112,28 +203,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
     this.addNumberSetting(contextAdvanced, language, "祖先摘要最大字符", "Ancestor summary character limit", "contextTruncateChars", 2400, 128, 20000);
     this.addNumberSetting(contextAdvanced, language, "上下文最大字符", "Maximum context characters", "maxContextChars", 12000, 256, 100000);
 
-    new Setting(containerEl)
-      .setName(t(language, "settingExportFolderName"))
-      .setDesc(t(language, "settingExportFolderDesc"))
-      .addText((text) => {
-        text
-          .setPlaceholder(DEFAULT_EXPORT_DIR)
-          .setValue(this.plugin.settings.defaultExportFolder)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({ defaultExportFolder: value.trim() || DEFAULT_EXPORT_DIR });
-          });
-      });
-
-    new Setting(containerEl)
-      .setName(t(language, "settingTabName"))
-      .setDesc(t(language, "settingTabDesc"))
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.useTabToCreateChildNodes)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings({ useTabToCreateChildNodes: value });
-          });
-      });
+    this.addSectionHeader(containerEl, label(language, "回复", "Responses"));
 
     new Setting(containerEl)
       .setName(t(language, "settingStreamName"))
@@ -156,27 +226,25 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
             await this.plugin.updateSettings({ autoSummarizeNodes: value });
           });
       });
-
-    new Setting(containerEl)
-      .setName(t(language, "settingOnboardingName"))
-      .setDesc(t(language, "settingOnboardingDesc"))
-      .addButton((button) => {
-        button
-          .setButtonText(t(language, "settingOnboardingButton"))
-          .onClick(async () => {
-            await this.plugin.updateSettings({ onboardingCardDismissed: false });
-            window.dispatchEvent(new CustomEvent("spider-onboarding-card-change", { detail: { dismissed: false } }));
-            new Notice(t(language, "settingOnboardingRestored"));
-          });
-      });
   }
 
-  private renderProfile(profile: ModelProfile, profileCount: number): void {
+  private addSectionHeader(container: HTMLElement, title: string, description?: string): HTMLElement {
+    const header = container.createDiv({ cls: "spider-settings-section-header" });
+    const copy = header.createDiv({ cls: "spider-settings-section-copy" });
+    copy.createEl("h2", { text: title });
+    if (description) copy.createEl("p", { text: description });
+    return header;
+  }
+
+  private renderProfile(container: HTMLElement, profile: ModelProfile, profileCount: number): void {
     const language = this.plugin.settings.language;
     const isDefault = profile.id === this.plugin.settings.defaultModelProfileId;
-    const heading = new Setting(this.containerEl)
-      .setName(isDefault ? label(language, "默认模型配置", "Default model profile") : profile.alias || label(language, "未命名配置", "Unnamed profile"))
-      .setHeading();
+    const card = container.createEl("section", { cls: "spider-settings-profile" });
+    card.dataset.profileId = profile.id;
+    const heading = new Setting(card)
+      .setName(isDefault ? label(language, "默认模型", "Default model") : profile.alias || label(language, "未命名配置", "Unnamed profile"));
+    heading.settingEl.addClass("spider-settings-profile-heading");
+    heading.nameEl.replaceWith(createProfileHeading(heading.nameEl, isDefault ? label(language, "默认模型", "Default model") : profile.alias || label(language, "未命名配置", "Unnamed profile")));
     if (!isDefault) {
       heading.addButton((button) => {
         button.setButtonText(label(language, "设为默认", "Make default")).onClick(async () => {
@@ -201,7 +269,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
     }
 
     if (!isDefault) {
-      this.addProfileText(profile, "alias", label(language, "名称", "Alias"), label(language, "例如：推理模型", "For example: Reasoning"));
+      this.addProfileText(profile, "alias", label(language, "名称", "Alias"), label(language, "例如：推理模型", "For example: Reasoning"), undefined, false, card);
     }
     this.addProfileText(
       profile,
@@ -209,6 +277,8 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
       label(language, "API 地址", "API base URL"),
       "https://api.openai.com/v1",
       label(language, "可以填写基础地址或完整的 /chat/completions 地址。", "Accepts the API root or a full /chat/completions URL."),
+      false,
+      card,
     );
     this.addProfileText(
       profile,
@@ -217,10 +287,11 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
       "sk-...",
       label(language, "留空时会从环境变量读取。", "Leave blank to resolve the key from an environment variable."),
       true,
+      card,
     );
-    this.renderModelPicker(profile, language);
+    this.renderModelPicker(card, profile, language);
 
-    const advanced = this.containerEl.createEl("details", { cls: "spider-settings-advanced" });
+    const advanced = card.createEl("details", { cls: "spider-settings-advanced" });
     advanced.createEl("summary", { text: label(language, "高级模型选项", "Advanced model options") });
     this.addProfileText(
       profile,
@@ -264,7 +335,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
       });
 
     const testResult = this.apiTestResults.get(profile.id);
-    const testSetting = new Setting(this.containerEl)
+    const testSetting = new Setting(card)
       .setName(label(language, "连接测试", "Connection test"))
       .setDesc(testResult ? formatApiTestResult(testResult) : label(language, "测试此配置的 API 和模型。", "Test this profile's API endpoint and model."));
     testSetting.addButton((button) => {
@@ -299,8 +370,8 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
 
   }
 
-  private renderModelPicker(profile: ModelProfile, language: "zh-CN" | "en"): void {
-    const setting = new Setting(this.containerEl)
+  private renderModelPicker(container: HTMLElement, profile: ModelProfile, language: "zh-CN" | "en"): void {
+    const setting = new Setting(container)
       .setName(label(language, "可用模型", "Available models"))
       .setDesc(label(language, "输入以搜索；选中列表项，或输入自定义模型 ID 后按 Enter。", "Type to search; select a result, or press Enter to use a custom model ID."));
     setting.settingEl.addClass("spider-model-setting");
@@ -557,6 +628,13 @@ function formatApiTestResult(result: ApiTestResult): string {
 
 function label(language: "zh-CN" | "en", chinese: string, english: string): string {
   return language === "zh-CN" ? chinese : english;
+}
+
+function createProfileHeading(previous: HTMLElement, title: string): HTMLHeadingElement {
+  const heading = previous.ownerDocument.createElement("h3");
+  heading.className = "spider-settings-profile-title";
+  heading.textContent = title;
+  return heading;
 }
 
 function isThinkingParamStyle(value: string): value is ThinkingParamStyle {

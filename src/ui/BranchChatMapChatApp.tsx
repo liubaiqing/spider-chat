@@ -22,7 +22,7 @@ interface BranchChatMapChatAppProps {
 export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChatAppProps): ReactElement {
   const rootRef = useRef<HTMLDivElement>(null);
   const state = useActiveViewState(plugin);
-  const { map, activeNodeId, drafts, error, errorDetails, pendingNodeId, streamingMessages, generationJobs } = state;
+  const { map, activeNodeId, drafts, error, errorDetails, pendingNodeId, streamingMessages, generationJobs, composerFocusToken } = state;
   const node = activeNodeId && map ? map.nodes[activeNodeId] : null;
   const settings = usePluginSettings(plugin);
   const language = settings.language;
@@ -257,6 +257,7 @@ export function BranchChatMapChatApp({ plugin, onController }: BranchChatMapChat
         language={language}
         onboardingVariant={onboardingVariant}
         streamingMessage={streamingMessages[node.id]}
+        focusComposerToken={composerFocusToken}
         onCancel={(nodeId) => vs?.cancelGeneration(nodeId)}
         onExport={exportMap}
         onCreateChild={createChild}

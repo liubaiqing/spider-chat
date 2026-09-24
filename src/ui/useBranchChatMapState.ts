@@ -17,6 +17,7 @@ const INITIAL_STATE: BranchChatMapState = {
   errorDetails: null,
   hasManualPositions: false,
   layoutToken: 0,
+  composerFocusToken: 0,
 };
 
 export function useBranchChatMapState(viewState: ViewState): BranchChatMapState {

@@ -28,6 +28,11 @@ export interface BranchChatMapState {
   hasManualPositions: boolean;
   /** Bumped by auto-layout so the canvas can level single-child links once measured. */
   layoutToken: number;
+  /**
+   * Bumped only when a branch is created. Switching to an existing node must not
+   * pull focus into the composer, or arrow-key navigation loses the canvas.
+   */
+  composerFocusToken: number;
 }
 
 export interface NodeSendOptions {
@@ -51,6 +56,7 @@ const INITIAL_STATE: BranchChatMapState = {
   errorDetails: null,
   hasManualPositions: false,
   layoutToken: 0,
+  composerFocusToken: 0,
 };
 
 export interface NodeSearchResult {
@@ -146,6 +152,7 @@ export class ViewState {
     if (!createdChild) return;
     this.setState({
       activeNodeId: createdChild.id,
+      composerFocusToken: this.state.composerFocusToken + 1,
       drafts: selectedText
         ? {
             ...this.state.drafts,
@@ -758,6 +765,7 @@ export class ViewState {
       errorDetails: null,
       hasManualPositions: resetUi ? false : this.state.hasManualPositions,
       layoutToken: resetUi ? 0 : this.state.layoutToken,
+      composerFocusToken: 0,
     };
     this.syncDocument();
   }

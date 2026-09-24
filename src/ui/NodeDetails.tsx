@@ -59,6 +59,8 @@ interface NodeDetailsProps {
   language: AppLanguage;
   onboardingVariant: OnboardingGuideVariant | null;
   streamingMessage?: ChatMessage;
+  /** Changes when a branch is created; asks the composer to take focus once. */
+  focusComposerToken: number;
   onCancel(this: void, nodeId: NodeId): void;
   onExport(this: void): void;
   onCreateChild(this: void, anchorText?: string, source?: BranchSource): void;
@@ -115,6 +117,7 @@ export function NodeDetails({
   language,
   onboardingVariant,
   streamingMessage,
+  focusComposerToken,
   onCancel,
   onExport,
   onCreateChild,
@@ -205,11 +208,14 @@ export function NodeDetails({
     };
   }, [openMenu]);
 
+  // Focus the composer only right after a branch is created, where typing the
+  // follow-up is the obvious next step. Focusing on every empty node would steal
+  // the canvas focus that arrow-key navigation depends on.
   useEffect(() => {
-    if (node.messages.length === 0) {
+    if (focusComposerToken > 0 && node.messages.length === 0) {
       inputRef.current?.focus();
     }
-  }, [node.id]);
+  }, [focusComposerToken]);
 
   return (
     <aside className="bcm-detail">

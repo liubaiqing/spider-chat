@@ -408,6 +408,25 @@ describe("ViewState", () => {
     expect(written[0]?.content.startsWith("mindmap")).toBe(true);
   });
 
+  it("asks the composer for focus only when a branch is created", () => {
+    const map = createRootMap("Focus", "Named root");
+    const { map: withChild, child } = addChildNode(map, map.rootNodeId, { title: "Child" });
+    const vs = createViewState(withChild);
+    const before = vs.getSnapshot().composerFocusToken;
+
+    // Switching to an existing empty node must not pull focus out of the canvas.
+    vs.setActiveNode(child.id);
+    expect(vs.getSnapshot().composerFocusToken).toBe(before);
+    vs.revealNode(child.id);
+    expect(vs.getSnapshot().composerFocusToken).toBe(before);
+    vs.goToParent();
+    expect(vs.getSnapshot().composerFocusToken).toBe(before);
+
+    vs.setActiveNode(map.rootNodeId);
+    vs.createChild("量子纠缠");
+    expect(vs.getSnapshot().composerFocusToken).toBe(before + 1);
+  });
+
   it("keeps the composer's model, context, and thinking choices together", () => {
     const map = createRootMap("Composer", "Composer root");
     const vs = createViewState(map);

@@ -11,10 +11,12 @@ import {
   type Node,
   type NodeChange,
   type NodeProps,
+  useViewport,
 } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
 import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, ModelProfile, NodeId } from "../types";
+import { NO_GUIDES, snapToGuides, type SnapBox } from "../domain/snap";
 import { markdownToPlainText, truncateText } from "../utils/text";
 import { NodeNotePopover } from "./NodeNotePopover";
 import type { NodeGenerationJob } from "./NodeDetails";
@@ -148,8 +150,13 @@ const nodeTypes = {
   branchNode: BranchNode,
 };
 
+/** Fallbacks used only before React Flow reports a measured size. */
+const FALLBACK_WIDTH = 300;
+const FALLBACK_HEIGHT = 196;
+
 interface GraphCanvasProps {
   map: ChatMap;
+  snapEnabled: boolean;
   replayPanelId: string;
   replayPanelOpen: boolean;
   activeNodeId: NodeId;
@@ -231,6 +238,7 @@ function collectActivePathIds(map: ChatMap, activeNodeId: NodeId): Set<NodeId> {
 
 function GraphCanvasInner({
   map,
+  snapEnabled,
   replayPanelId,
   replayPanelOpen,
   activeNodeId,
@@ -400,10 +408,62 @@ function GraphCanvasInner({
   }, [activePathIds, map.edges, map.nodes, visibleIds]);
 
   const [nodes, setNodes] = useState<BranchFlowNode[]>(computedNodes);
+  const [guides, setGuides] = useState<{ vertical: number[]; horizontal: number[] }>({
+    vertical: NO_GUIDES,
+    horizontal: NO_GUIDES,
+  });
+  const { x: viewportX, y: viewportY, zoom } = useViewport();
+  // Sizes of the other cards are stable during a drag, so a ref is enough here.
+  const nodesRef = useRef<BranchFlowNode[]>(computedNodes);
 
   useEffect(() => {
     setNodes(computedNodes);
   }, [computedNodes]);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  const toSnapBoxes = (list: readonly BranchFlowNode[], excludeId: string): SnapBox[] => list
+    .filter((candidate) => candidate.id !== excludeId)
+    .map((candidate) => ({
+      id: candidate.id,
+      x: candidate.position.x,
+      y: candidate.position.y,
+      width: candidate.measured?.width ?? FALLBACK_WIDTH,
+      height: candidate.measured?.height ?? FALLBACK_HEIGHT,
+    }));
+
+  /** Magnetic alignment: rewrite the position React Flow is about to apply. */
+  const applySnap = (changes: NodeChange<BranchFlowNode>[]): NodeChange<BranchFlowNode>[] => {
+    if (!snapEnabled) {
+      setGuides((current) => (current.vertical.length || current.horizontal.length ? { vertical: NO_GUIDES, horizontal: NO_GUIDES } : current));
+      return changes;
+    }
+
+    let next = { vertical: NO_GUIDES as number[], horizontal: NO_GUIDES as number[] };
+    const adjusted = changes.map((change) => {
+      if (change.type !== "position" || !change.dragging || !change.position) return change;
+      const dragged = nodesRef.current.find((candidate) => candidate.id === change.id);
+      const result = snapToGuides({
+        id: change.id,
+        x: change.position.x,
+        y: change.position.y,
+        width: dragged?.measured?.width ?? FALLBACK_WIDTH,
+        height: dragged?.measured?.height ?? FALLBACK_HEIGHT,
+      }, toSnapBoxes(nodesRef.current, change.id));
+      if (result.vertical.length || result.horizontal.length) {
+        next = { vertical: result.vertical, horizontal: result.horizontal };
+      }
+      return { ...change, position: { x: result.x, y: result.y } };
+    });
+
+    setGuides((current) => (current.vertical.join() === next.vertical.join()
+      && current.horizontal.join() === next.horizontal.join()
+      ? current
+      : next));
+    return adjusted;
+  };
 
   return (
     <div
@@ -500,15 +560,32 @@ function GraphCanvasInner({
           onOpenNodeMenu(node.id, { x: event.clientX, y: event.clientY });
         }}
         onPaneClick={() => setPinnedNoteNodeId(null)}
-        onNodeDragStop={(_event, node) => onPositionChange(node.id, node.position)}
+        onNodeDragStop={(_event, node) => {
+          setGuides({ vertical: NO_GUIDES, horizontal: NO_GUIDES });
+          onPositionChange(node.id, node.position);
+        }}
         onNodesChange={(changes: NodeChange<BranchFlowNode>[]) => {
-          setNodes((current) => applyNodeChanges(changes, current));
+          // Snapping and guide updates happen before the updater: an updater must stay
+          // pure, and calling setGuides inside it would re-run the whole node array on
+          // every render pass, wiping the measured sizes React Flow needs.
+          const adjusted = applySnap(changes);
+          setNodes((current) => applyNodeChanges(adjusted, current));
         }}
       >
         <Background gap={24} size={1} />
         <Controls />
         <MiniMap pannable zoomable nodeStrokeWidth={2} />
       </ReactFlow>
+      {guides.vertical.length > 0 || guides.horizontal.length > 0 ? (
+        <div className="bcm-snap-guides" aria-hidden="true">
+          {guides.vertical.map((x) => (
+            <div key={`vertical-${x}`} className="bcm-snap-guide is-vertical" style={{ left: x * zoom + viewportX }} />
+          ))}
+          {guides.horizontal.map((y) => (
+            <div key={`horizontal-${y}`} className="bcm-snap-guide is-horizontal" style={{ top: y * zoom + viewportY }} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

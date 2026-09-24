@@ -61,6 +61,7 @@ export function createDefaultSettings(locale: string): BranchChatMapSettings {
     model: defaultProfile.model,
     defaultExportFolder: DEFAULT_EXPORT_DIR,
     useTabToCreateChildNodes: true,
+    snapToGuides: true,
     autoSummarizeNodes: false,
     includeParentContext: true,
     includeFullContext: false,
@@ -129,6 +130,7 @@ export function normalizeSettings(
     contextTruncateChars: positiveInteger(input.contextTruncateChars, defaults.contextTruncateChars ?? 2400),
     maxContextChars: positiveInteger(input.maxContextChars, defaults.maxContextChars ?? 12000),
     maxConcurrentGenerations: positiveInteger(input.maxConcurrentGenerations, defaults.maxConcurrentGenerations ?? 3),
+    snapToGuides: typeof input.snapToGuides === "boolean" ? input.snapToGuides : defaults.snapToGuides,
     includeParentContext: contextMode !== "none",
     includeFullContext: contextMode === "whole",
   };

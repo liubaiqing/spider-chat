@@ -159,6 +159,9 @@
 }
 
 .bcm-more-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   border: 0;
   border-radius: 5px;
@@ -168,6 +171,18 @@
   font-size: 12px;
   text-align: left;
   padding: 7px 8px;
+}
+
+/* Fixed check column keeps toggle rows aligned with plain menu rows. */
+.bcm-more-check {
+  flex: 0 0 auto;
+  width: 12px;
+  color: var(--bcm-accent-strong);
+  font-size: 11px;
+}
+
+.bcm-more-item.is-on {
+  color: var(--bcm-accent-strong);
 }
 
 .bcm-more-item:hover {
@@ -615,6 +630,33 @@
   min-height: 0;
   height: auto;
   z-index: 2;
+}
+
+/* ─── Snap guides ─── */
+
+.bcm-snap-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.bcm-snap-guide {
+  position: absolute;
+  background: var(--bcm-accent);
+  opacity: 0.9;
+}
+
+.bcm-snap-guide.is-vertical {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.bcm-snap-guide.is-horizontal {
+  left: 0;
+  right: 0;
+  height: 1px;
 }
 
 /* ─── Graph node ─── */

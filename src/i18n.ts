@@ -38,6 +38,8 @@ export type TranslationKey =
   | "deleteMap"
   | "switchMapHint"
   | "moreActions"
+  | "snapToGuides"
+  | "snapToGuidesHint"
   | "confirmAutoLayout"
   | "confirmDeleteMap"
   | "confirmDeleteNode"
@@ -218,6 +220,8 @@ const zh: TranslationDictionary = {
   deleteMap: "删除图谱",
   switchMapHint: "切换图谱",
   moreActions: "更多",
+  snapToGuides: "智能吸附",
+  snapToGuidesHint: "拖动节点时自动吸附到其它节点的边与中线，并显示对齐参考线。",
   confirmAutoLayout: "自动布局会重新排列当前图谱，可能覆盖你手动拖动的位置。确认继续？",
   confirmDeleteMap: "确认删除「{title}」？此操作不可撤销。",
   confirmDeleteNode: "确认删除当前节点？此操作不可撤销。",
@@ -397,6 +401,8 @@ const en: TranslationDictionary = {
   deleteMap: "Delete map",
   switchMapHint: "Switch map",
   moreActions: "More",
+  snapToGuides: "Smart guides",
+  snapToGuidesHint: "Snap a dragged node onto the edges and centres of its neighbours, with alignment guides.",
   confirmAutoLayout: "Auto layout will rearrange this map and may overwrite manually dragged positions. Continue?",
   confirmDeleteMap: "Delete “{title}”? This cannot be undone.",
   confirmDeleteNode: "Delete the current node? This cannot be undone.",

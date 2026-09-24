@@ -107,6 +107,8 @@ export interface BranchChatMapSettings {
   model: string;
   defaultExportFolder: string;
   useTabToCreateChildNodes: boolean;
+  /** Magnetic alignment of dragged cards onto the axes of their neighbours. */
+  snapToGuides: boolean;
   autoSummarizeNodes: boolean;
   includeParentContext: boolean;
   includeFullContext: boolean;

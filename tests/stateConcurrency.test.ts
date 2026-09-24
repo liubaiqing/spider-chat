@@ -13,6 +13,7 @@ const baseSettings: BranchChatMapSettings = {
   model: "test-model",
   defaultExportFolder: "Spider Maps",
   useTabToCreateChildNodes: true,
+  snapToGuides: true,
   autoSummarizeNodes: false,
   includeParentContext: true,
   includeFullContext: false,

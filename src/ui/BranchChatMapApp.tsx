@@ -386,6 +386,17 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
             </button>
             {moreOpen ? (
               <div className="bcm-more-menu">
+                <button
+                  className={`bcm-more-item${settings.snapToGuides ? " is-on" : ""}`}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={settings.snapToGuides}
+                  title={t(language, "snapToGuidesHint")}
+                  onClick={() => { void plugin.updateSettings({ snapToGuides: !settings.snapToGuides }); }}
+                >
+                  <span className="bcm-more-check" aria-hidden="true">{settings.snapToGuides ? "✓" : ""}</span>
+                  {t(language, "snapToGuides")}
+                </button>
                 <button className="bcm-more-item is-danger" onClick={() => { setMoreOpen(false); void handleDeleteCurrentMap(); }} type="button">
                   {t(language, "deleteMap")}
                 </button>
@@ -398,6 +409,7 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
       <div className="bcm-workspace">
         <GraphCanvas
           map={map}
+          snapEnabled={settings.snapToGuides}
           replayPanelId={replayPanelId}
           replayPanelOpen={replayPanelOpen}
           activeNodeId={activeNode.id}

@@ -12,6 +12,7 @@ test-vault/
 .branch-chat-map/
 .obsidian/
 data.json
+.impeccable/
 /Spider Graphs/
 /Spider Maps/
 /Spider Chat Graphs/
@@ -22,6 +23,9 @@ data.json
 .env.*
 !.env.example
 .DS_Store
+*.log
+.idea/
+.vscode/
 
 # reports and caches
 artifacts/

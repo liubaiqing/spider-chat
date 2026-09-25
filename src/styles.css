@@ -759,7 +759,7 @@
 }
 
 .bcm-graph-node.is-search-target,
-.react-flow__node:focus-visible .bcm-graph-node {
+.bcm-graph .react-flow__node:focus-visible .bcm-graph-node {
   border-color: var(--bcm-accent);
   box-shadow: 0 0 0 4px var(--bcm-accent-soft), 0 0 0 1px var(--bcm-accent);
 }
@@ -2082,12 +2082,26 @@
 
 /* ─── React Flow overrides ─── */
 
-.react-flow__edge-path {
+.bcm-graph .react-flow {
+  --xy-background-pattern-dots-color: var(--bcm-border);
+  --xy-handle-background-color: var(--bcm-panel);
+  --xy-handle-border-color: var(--bcm-text);
+  --xy-minimap-background-color: var(--bcm-panel);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--bcm-panel-soft) 65%, transparent);
+  --xy-minimap-node-background-color: var(--bcm-muted);
+  --xy-minimap-node-stroke-color: var(--bcm-text);
+  --xy-controls-button-background-color: var(--bcm-panel);
+  --xy-controls-button-background-color-hover: var(--bcm-panel-raised);
+  --xy-controls-button-color: var(--bcm-text);
+  --xy-controls-button-color-hover: var(--bcm-text);
+}
+
+.bcm-graph .react-flow__edge-path {
   stroke: color-mix(in srgb, var(--bcm-accent) 35%, var(--bcm-muted));
   stroke-width: 1.5;
 }
 
-.react-flow__edge.is-path-edge .react-flow__edge-path {
+.bcm-graph .react-flow__edge.is-path-edge .react-flow__edge-path {
   stroke: var(--bcm-accent-strong);
   stroke-width: 2.2;
 }
@@ -2105,7 +2119,14 @@
   border: 1px solid var(--bcm-border-subtle);
   border-radius: var(--bcm-radius);
   background: var(--bcm-panel);
+  color: var(--bcm-text);
   box-shadow: var(--bcm-shadow-md);
+}
+
+.bcm-graph .react-flow__controls-button:hover {
+  border-color: var(--bcm-border);
+  background: var(--bcm-panel-raised);
+  color: var(--bcm-text);
 }
 
 .bcm-graph .react-flow__controls-button svg {
@@ -2118,7 +2139,7 @@
   outline-offset: 2px;
 }
 
-.react-flow__minimap {
+.bcm-graph .react-flow__minimap {
   border: 1px solid var(--bcm-border-subtle);
   border-radius: var(--bcm-radius);
   overflow: hidden;
@@ -2127,13 +2148,13 @@
   transition: opacity 160ms ease;
 }
 
-.react-flow__minimap:hover,
-.react-flow__minimap:focus-within,
-.react-flow__minimap:active {
+.bcm-graph .react-flow__minimap:hover,
+.bcm-graph .react-flow__minimap:focus-within,
+.bcm-graph .react-flow__minimap:active {
   opacity: 1;
 }
 
-.react-flow__attribution {
+.bcm-graph .react-flow__attribution {
   display: none;
 }
 
@@ -2194,7 +2215,7 @@
     width: min(260px, calc(100vw - 36px));
   }
 
-  .react-flow__minimap {
+  .bcm-graph .react-flow__minimap {
     display: none;
   }
 
@@ -2393,7 +2414,9 @@ div.suggestion-container .suggestion-item {
 }
 
 .bcm-node-badge.is-direction {
-  border-color: var(--bcm-branch-color, var(--bcm-border-subtle));
+  border-color: var(--bcm-border);
+  border-left: 3px solid var(--bcm-accent);
+  color: var(--bcm-text);
 }
 
 .bcm-node-badge.is-running {

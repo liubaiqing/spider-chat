@@ -109,7 +109,7 @@ const BranchNode = memo(function BranchNode({ data }: NodeProps<BranchFlowNode>)
       </div>
       {(data.node.branchDirection || modelName || data.generationJob) ? (
         <div className="bcm-node-badges">
-          {data.node.branchDirection ? <span className="bcm-node-badge is-direction" style={branchColor ? { borderColor: branchColor } : undefined}>{t(data.language, "branchDirectionBadge")}: {data.node.branchDirection}</span> : null}
+          {data.node.branchDirection ? <span className="bcm-node-badge is-direction" style={branchColor ? { borderLeftColor: branchColor } : undefined}>{t(data.language, "branchDirectionBadge")}: {data.node.branchDirection}</span> : null}
           {modelName ? <span className="bcm-node-badge is-model">{t(data.language, "branchModelBadge")}: {modelName}</span> : null}
           {data.generationJob?.status === "queued" ? (
             <span className="bcm-node-badge is-queued">

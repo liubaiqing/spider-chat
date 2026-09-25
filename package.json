@@ -1,17 +1,17 @@
 {
-  "name": "spider",
-  "version": "0.1.11",
-  "description": "Obsidian plugin for Tab-driven infinite AI chat branches as a knowledge map.",
+  "name": "spider-chat",
+  "version": "0.1.0",
+  "description": "Obsidian plugin for branching AI chats, model profiles, and portable knowledge maps.",
   "type": "module",
   "main": "main.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/111pointer111/spider.git"
+    "url": "git+https://github.com/liubaiqing/spider-chat.git"
   },
   "bugs": {
-    "url": "https://github.com/111pointer111/spider/issues"
+    "url": "https://github.com/liubaiqing/spider-chat/issues"
   },
-  "homepage": "https://github.com/111pointer111/spider#readme",
+  "homepage": "https://github.com/liubaiqing/spider-chat#readme",
   "scripts": {
     "dev": "node scripts/build.mjs",
     "build": "tsc --noEmit && node scripts/build.mjs production",
@@ -27,7 +27,7 @@
     "knowledge-map",
     "react-flow"
   ],
-  "author": "huangtao",
+  "author": "liubaiqing",
   "license": "MIT",
   "dependencies": {
     "@dagrejs/dagre": "^1.1.5",

@@ -67,7 +67,7 @@ export function SelectionBranchHint({ rootRef, nodeId, enabled, language, onCrea
       };
     };
     bind();
-    const view = root.closest<HTMLElement>(".spider-chat-view");
+    const view = root.closest<HTMLElement>(".spider-chat-sidebar-view");
     const offMigration = view?.onWindowMigrated?.(bind);
     return () => { unbind(); offMigration?.(); };
   }, [enabled, nodeId, rootRef]);

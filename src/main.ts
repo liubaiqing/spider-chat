@@ -3,8 +3,6 @@ import { BranchChatMapSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, normalizeSettings, normalizeApiBaseUrl } from "./settingsDefaults";
 import type { BranchChatMapSettings, ModelProfile } from "./types";
 import {
-  LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP,
-  LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP_CHAT,
   VIEW_TYPE_BRANCH_CHAT_MAP,
   VIEW_TYPE_BRANCH_CHAT_MAP_CHAT,
 } from "./constants";
@@ -127,7 +125,6 @@ export default class BranchChatMapPlugin extends Plugin {
     this.updateLocalizedChrome();
 
     this.app.workspace.onLayoutReady(() => {
-      this.detachLegacyViews();
       void this.ensureMainTabView(false).then((leaf) => {
         if (leaf) {
           if (leaf.view instanceof BranchChatMapView) leaf.view.activateSession();
@@ -304,11 +301,6 @@ export default class BranchChatMapPlugin extends Plugin {
     this.app.workspace.rightSplit.expand();
 
     return leaf;
-  }
-
-  private detachLegacyViews(): void {
-    this.app.workspace.detachLeavesOfType(LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP);
-    this.app.workspace.detachLeavesOfType(LEGACY_VIEW_TYPE_BRANCH_CHAT_MAP_CHAT);
   }
 
   private addLocalizedCommand(key: TranslationKey, command: Omit<Command, "name">): void {

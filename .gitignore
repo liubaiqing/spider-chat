@@ -12,10 +12,15 @@ test-vault/
 .branch-chat-map/
 .obsidian/
 data.json
+/Spider Graphs/
+/Spider Maps/
+/Spider Chat Graphs/
+/Spider Chat Exports/
 
 # environment and local files
 .env
 .env.*
+!.env.example
 .DS_Store
 
 # reports and caches

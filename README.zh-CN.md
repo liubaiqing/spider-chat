@@ -1,216 +1,71 @@
-# Spider（蜘蛛图谱）
+# Spider Chat
 
-[![GitHub release (latest)](https://img.shields.io/github/v/release/111pointer111/spider?style=flat-square)](https://github.com/111pointer111/spider/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/111pointer111/spider/total?style=flat-square)](https://github.com/111pointer111/spider/releases)
-[![License](https://img.shields.io/github/license/111pointer111/spider?style=flat-square)](LICENSE)
-[![Obsidian min version](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-blueviolet?style=flat-square)](https://obsidian.md)
-[![Obsidian Community](https://img.shields.io/badge/Obsidian-Community-blueviolet?style=flat-square)](https://community.obsidian.md/plugins/spider)
+[English](README.md) · [图谱存档格式](docs/map-archive.md) · [MIT 许可证](LICENSE)
 
-> 🌏 **其他语言**: [English](README.md)
+**在 Obsidian 中边读 AI 回答边追问，把探索过程留成一张可回看的图谱。**
 
-**AI 对话像蛛网一样自然展开——按 `Tab` 键从任意回答拉出新分支，让追问、对比、回溯成为肌肉记忆。**
+Spider Chat 以 [Spider](https://github.com/111pointer111/spider) 为底座，保留「选中回答中的文字 → 按 `Tab` → 创建追问分支」的直接操作。图谱占主视图，聊天位于右侧栏；它借鉴了 [Canvas Branch Chat](https://github.com/p4nt1um/canvas-branch-chat) 的多模型和上下文等思路，但不在原生 Canvas 上实时聊天。
 
-一个 Obsidian 插件，把 ChatGPT / Claude / DeepSeek / 任何 OpenAI 兼容 API 的对话装进**可分支的节点图**。读完 AI 回答、遇到不熟的术语，选中文字按 `Tab`，自动生成子节点继续追问——无限深度、随时回退、最终一键导出为 Obsidian Canvas / Markdown / Mermaid 思维导图。
+## 与原项目的关系
 
-![spider screenshot](.github/screenshot.png)
+|  | 原版 Spider | Canvas Branch Chat | Spider Chat |
+| --- | --- | --- | --- |
+| 实时工作区 | 独立图谱 + 聊天侧栏 | 原生 Canvas 对话节点 | 独立图谱 + 聊天侧栏，延续 Spider 的 `Tab` 追问 |
+| 模型与上下文 | 单模型设置、较简单的上下文开关 | 多模型、祖先上下文等 | 多模型档案；每次请求可覆盖模型和四种上下文模式 |
+| 大图阅读 | 节点导航与自动布局 | Canvas 导航 | 图谱搜索、未解决筛选、聚焦当前问题链、来源原句定位和回放 |
+| 数据与导出 | Spider 地图及 Markdown / Canvas / SVG 包 | `.canvas` 对话及其他导出 | 单文件 `.spider.json` 存档；保留原导出包，增加离线交互式 HTML |
+| 生成任务 | 单次请求流程 | Canvas 中生成分支 | 按节点排队、取消和重试；多视图共享地图状态 |
 
-> 首次安装时 Spider 会跟随 Obsidian 的界面语言，也可以随时在设置中切换中文或 English。
+这些是**两种工作方式的取舍**，并非声称涵盖两个原项目的全部功能。Spider Chat 没有 Canvas Branch Chat 的批量多方向分叉、分支合并和实时 Canvas 聊天，也不会导入其旧 `.canvas` 对话。
 
----
+## 为什么适合深入学习
 
-## 🤔 为什么需要 Spider？
+- **从原句出发**：在 AI 回答里选中不懂的概念，按 `Tab` 建立子问题。新分支保留来源文字；返回时可定位并短暂高亮原句。
+- **不同模型检验想法**：配置多个 OpenAI 兼容模型，子节点继承默认模型，也可以在单次发送时切换。历史 AI 消息记录实际使用的模型快照，不会被后来改配置影响。
+- **控制上下文范围**：无附加上下文、精简上级节点、完整祖先链、全图四种模式；单次覆盖不修改默认设置。精简上级节点是默认值。
+- **在大图中找回问题**：搜索标题、简记、总结、原文锚点与消息；筛选「进行中」，选中结果会把卡片移到可见区域。回放按时间、深度或广度浏览现存节点。
+- **整理成自己的知识**：总结和简记分开显示，AI 生成的总结可以再编辑。图谱支持自动布局、智能吸附、折叠分支和节点状态。
+- **可迁移的存档**：每张图及其聊天记录保存在笔记库的 `Spider Graphs/<地图 ID>.spider.json`。复制该文件到另一设备的同名目录即可读取图谱；API 密钥和模型配置仍需在设备上单独设置。
 
-| 场景 | 普通 AI 对话 | Spider |
-|---|---|---|
-| 读到一半想深入追问一个术语 | 复制粘贴 → 新开窗口 → 丢失原对话线索 | 选中文字 → `Tab` → 子节点自动带上下文 |
-| 同一个问题想对比几种提问方式 | 开 N 个标签页来回切 | 同一节点下挂多个子节点，左右对照 |
-| 探索完想把对话留作笔记 | 复制粘贴到笔记里，链接断裂 | 给节点写个人笔记，再导出 Markdown + Canvas |
-| 想让 AI 回答像 Notion AI 一样嵌在文档里 | 切窗口来回复制 | 全程不离开 Obsidian |
+## 安装与首次使用
 
-## ⚡ 30 秒上手
+Spider Chat 使用独立插件 ID `spider-chat`，**目前尚未上架 Obsidian 社区插件市场**。请从源码构建：
 
-1. **安装**：设置 → 第三方插件 → 浏览 → 搜索 `Spider` → 安装 → 启用
-2. **配置模型档案**：Settings → Spider → 在默认档案中填写 API 地址、密钥和模型（支持 OpenAI 兼容端点）
-3. **新建一张图**：点击 Spider ribbon 图标（或运行命令 `Spider: 新建 Spider 图谱`）→ 开始聊天
-4. **试试 Tab 分支**：AI 回答里选中一段文字，按 `Tab` —— 就这么简单
-
----
-
-## 进阶分支工作流
-
-图谱与聊天侧栏仍是实时工作界面。普通的「选中文字 → `Tab`」会立即建立单个子节点；进阶操作另设入口：
-
-- **模型档案**：保存多个 OpenAI 兼容模型配置。子节点继承父节点的默认档案，单次回答也可另选模型；AI 消息记录生成时实际使用的模型与档案名称。
-- **批量分叉**：从同一节点创建最多五个方向，每行分别设置方向和模型。生成请求进入插件级队列；默认同时运行三个，可设置为一至五个。
-- **上下文控制**：可选无附加上下文、精简父节点（默认）、完整祖先或全图。单次覆盖不会修改全局默认值。
-- **引用式合并**：创建引用其他节点的总结子节点，不改变图谱的父子关系。来源被删除后，引用仍保留标题快照。
-- **回放**：按时间、深度或广度浏览现存对话，支持暂停、单步与调速。回放无法重建已删除的编辑或逐 token 生成过程。
-- **独立 HTML 导出**：导出可离线搜索、回放和切换主题的图谱；原有 Markdown / Canvas / SVG 导出包保持原文件结构。
-
-旧版 Spider 地图和单模型设置可迁移后继续使用。实时聊天不依赖 Obsidian 原生 Canvas，也不导入 Canvas Branch Chat 的旧 `.canvas` 对话。
-
----
-
-## ✨ 核心特性
-
-### 🌳 无限分支的对话
-- **没有深度上限**：想追问多深就追问多深，图会跟着长
-- **父上下文自动带入**：子节点的问题发到 AI 时，自动带上父节点的标题/摘要/锚点
-- **流式响应**：打字机式的实时渲染，Markdown / 代码块同步高亮
-- **选中即分支**：AI 回答里高亮任意文字 → `Tab` → 子节点的"原文锚点"就是这段高亮
-- **就地提示**：选中 AI 正文后显示「Tab 创建分支」，也可以直接点击；取消选择即隐藏
-- **回到原句**：返回父节点或点击路径导航时恢复阅读位置，并短暂高亮分支的来源；普通节点切换也保留本次会话的阅读位置
-- **辅助动作**：重试、总结、AI 自动起标题
-
-### 🕸️ 交互式知识图谱
-- **全标签页画布**（React Flow 驱动）
-- **点击节点切换上下文**，右侧聊天面板自动跟随
-- **折叠 / 展开子树**：大图也能保持清爽
-- **自动布局**（Dagre 算法），路径自动高亮
-- **拖拽节点**：位置持久化，下次打开还是你摆的样子
-- **节点个人笔记**：悬停铅笔预览，点击固定编辑，并自动保存
-
-### 📦 一键导出完整包
-
-```
-Spider Maps/
-  ├── index.md                  # Obsidian 入口笔记
-  ├── brief.md                  # 关键结论、待研究问题与进度
-  ├── nodes/                    # 每个节点一份独立 md
-  ├── map.canvas                # 可编辑知识图谱
-  └── map.svg                   # 可缩放、可分享的知识图谱图片
-```
-
-- Canvas 节点带颜色编码（紫色=根 / 绿色=已理解 / 灰色=已归档 / 蓝色=进行中）
-- Canvas 直接展示概念标题、短摘要和完整笔记链接，节点之间预留清晰间距
-- 沿箭头阅读分支，原文锚点保留在笔记中，避免长标签遮挡图谱
-- SVG 保留同样的疏朗布局，缩小时仍显示标题和摘要，放大不失真
-- 重复导出会新建带序号的快照目录，保留之前的导出和手写补充
-- Markdown 之间双向链接 + 回链，构建完整思考链
-
-### 🔌 兼容任何 OpenAI 兼容 API
-- **官方 OpenAI**（`https://api.openai.com/v1`）
-- **DeepSeek / Moonshot / 通义千问 / 智谱 GLM**（OpenAI 兼容模式）
-- **OpenRouter / Together / Groq**（聚合 API）
-- **本地 LLM**：Ollama、vLLM、LM Studio 的 OpenAI 兼容模式
-- **通过代理的 Anthropic Claude**
-
-> 💡 鉴于是 OpenAI 兼容端点，你只需要填 base URL 和 key，model 填你想用的那个。
-
-### 🔐 隐私 & 网络声明
-- 插件**需要联网**才能调用 AI，但你完全掌控调用哪个端点
-- **API 密钥仅存本地**：可保存在插件设置或所选 `.env` 来源中；请求只会将密钥发往你配置的端点
-- **图谱数据 100% 本地**：所有地图存为 `.spider/maps/*.json`，可被 Obsidian 同步
-- **离线可用**：知识图谱、导航、导出、查看历史全部不依赖网络，只有"发送消息"需要
-
-### 🌐 中英双语
-首次安装时跟随 Obsidian 的界面语言，也可以随时切换中文 / English；新生成的导出文件使用当前 Spider 界面语言。
-
----
-
-## ⌨️ 快捷键速查
-
-| 按键 | 作用 |
-|---|---|
-| `Tab` | 在 AI 回答里选中文字后创建分支；图谱画布获得焦点时创建空分支 |
-| `Shift + Tab` | 图谱画布获得焦点时返回父节点 |
-| `← →` | 图谱画布获得焦点时在父节点与第一个子节点间移动 |
-| `↑ ↓` | 图谱画布获得焦点时在兄弟节点之间移动 |
-| `Enter` | 发送消息（在输入框） |
-| `Shift + Enter` | 换行（在输入框） |
-| `Esc` | 清除当前选区 |
-| `Delete` / `Backspace` | 图谱画布获得焦点时删除当前非根节点 |
-
----
-
-## ⚙️ 配置项
-
-| 设置 | 说明 | 默认值 |
-|---|---|---|
-| 模型档案 | 别名、模型、API 根地址或完整接口地址、密钥或 `.env` 变量名、可选提示词与生成参数 | 由旧设置迁移的默认档案 |
-| 默认模型档案 | 新分支继承的档案 | 默认档案 |
-| 上下文模式 | 无 / 精简父节点 / 完整祖先 / 全图 | 精简父节点 |
-| 上下文长度 | 旧回答截断与总长度控制 | 可设置 |
-| 并发生成数 | 插件范围的请求上限 | 3（范围 1–5） |
-| Interface Language | 中文 / English | 跟随 Obsidian |
-| Stream responses | 流式响应 | ✅ 开 |
-| Tab to create child nodes | Tab 键开关 | ✅ 开 |
-| Auto-summarize nodes | AI 自动给节点生成摘要 | ❌ 关 |
-| Default export folder | 导出包目录 | `Spider Maps` |
-
----
-
-## 📥 安装
-
-### 从社区插件市场安装（推荐）
-
-打开 **设置 → 第三方插件 → 浏览**，搜索 `Spider`，点击 **安装 → 启用**，然后在 **设置 → Spider** 中配置默认模型档案。
-
-### 从 GitHub Release 手动安装
-1. 从最新 [Release](https://github.com/111pointer111/spider/releases/latest) 下载 `main.js`、`manifest.json` 和 `styles.css`
-2. 创建 `<vault>/.obsidian/plugins/spider/`
-3. 把三个文件复制到该目录
-4. 重启 Obsidian，在 **Settings → Community plugins** 中启用 Spider，然后配置 API key 和 model
-
-### 从源码安装（开发）
-```bash
-git clone https://github.com/111pointer111/spider
-cd spider
-npm install
+~~~bash
+git clone https://github.com/liubaiqing/spider-chat.git
+cd spider-chat
+npm ci
 npm run build
-# 把 main.js, manifest.json, styles.css 复制到
-# <vault>/.obsidian/plugins/spider/
-# 然后在 Obsidian 里启用插件
-```
+~~~
 
-或者用 `npm run link` 自动建 symlink 到你的 vault，配合 `npm run dev` 实现改代码即生效。
+将生成的 `main.js`、`styles.css` 和仓库中的 `manifest.json` 复制到笔记库的 `<vault>/.obsidian/plugins/spider-chat/`，然后重启 Obsidian，在「设置 → 第三方插件」中启用 Spider Chat。最低 Obsidian 版本为 1.8.7。
 
----
+1. 在「设置 → Spider Chat」配置默认模型的 API 地址、密钥和模型名称。支持 OpenAI 兼容的 Chat Completions 端点；也可从插件目录或笔记库中的 `.env` 读取密钥。
+2. 点击左侧功能区图标新建图谱，提出第一个问题。
+3. 阅读右侧 AI 回答，选中文字并按 `Tab` 追问；点击图谱节点可切换对话。
+4. 图谱工具栏可搜索、回放、布局和导出；右键节点可打开节点操作菜单。触屏长按或键盘 `Shift+F10` 也可打开菜单。
 
-## 🛠 开发
+### 从原版 Spider 迁移
 
-```bash
-npm install        # 安装依赖
-npm run dev        # watch 模式（esbuild）
-npm run build      # 生产构建（含 tsc --noEmit 类型检查）
-npm test           # 跑 vitest 测试
-npm run test:browser # 打开本地地址，点击 Run source navigation checks 验证真实浏览器交互（模拟 Obsidian API，不读写笔记库）
-npm run link       # 把构建产物 symlink 到 vault
-```
+Spider Chat 继续读取 `Spider Graphs` 中的现有存档，也能迁移旧版 `.spider/maps` 地图。因为插件 ID 已改，**原版 Spider 的模型设置不会自动复制**。若要沿用，先关闭 Obsidian，将 `<vault>/.obsidian/plugins/spider/data.json` 复制到 `<vault>/.obsidian/plugins/spider-chat/data.json`，再启动并检查设置。此文件可能含 API 密钥，请勿提交到 Git 仓库。建议不要同时用两个插件编辑同一张图。
 
-### 项目结构
+## 导出与数据
 
-```
-src/
-  ai/          OpenAI 兼容请求、模型档案密钥与上下文构建
-  domain/      ChatMap 不可变工厂 + 树操作 + 守卫 + Dagre 布局
-  export/      Markdown / Mermaid / Canvas / SVG / JSON 与独立 HTML 导出
-  state/       按地图共享状态与请求调度器 + 单视图界面状态
-  storage/     Vault 内 JSON 持久化、稳定 ID 路径与旧文件迁移
-  ui/          React 组件（图、聊天面板、画廊、弹窗）
-  utils/       ID 生成、路径处理、activeDocument 兼容垫片
-tests/         vitest 单测（领域层 + 导出层 + AI 层）
-__mocks__/     Obsidian API 的桩模块（让 vitest 跑得起来）
-```
+「导出」提供四种格式：原有的 Markdown / Canvas / SVG 文件包、独立交互式 HTML、单篇 Markdown、Mermaid。HTML 可离线阅读、搜索、回放和切换主题。存档是工作数据，导出文件是阅读和分享的副本；[存档结构说明](docs/map-archive.md)。
 
-## 🧭 路线图（想到就写）
+图谱存档不含 API 密钥、端点或系统提示词，但**包含完整聊天记录**。将存档上传或分享给他人前请自行检查内容。调用 AI 时，请求会发送到你配置的端点；离线浏览和导出无需连接模型服务。
 
-- [ ] 多选节点 + 批量操作
-- [ ] 节点引用 / 反向链接（自动追踪"哪个节点引用了我"）
-- [ ] 自定义 system prompt
-- [ ] 导出时可选附 AI 摘要
+## 开发
 
----
+~~~bash
+npm ci
+npm run build
+npm test
+npm run test:browser
+~~~
 
-## 📜 许可证
+`npm run link -- "<vault 路径>"` 可将构建产物链接到本地笔记库的 `spider-chat` 插件目录。项目的 `.gitignore` 排除了构建产物、依赖、笔记库目录、插件设置和 `.env` 文件。
 
-[MIT](LICENSE)
+## 致谢与许可
 
----
-
-## 🙏 致谢
-
-- [Obsidian](https://obsidian.md) — 这个疯狂可扩展的笔记应用
-- [React Flow (@xyflow/react)](https://reactflow.dev/) — 画布引擎
-- [@dagrejs/dagre](https://github.com/dagrejs/dagre) — 自动布局
-- [费曼学习法](https://en.wikipedia.org/wiki/Feynman_technique) — 用"能给别人讲清楚"作为理解标准
+本项目由 [Spider](https://github.com/111pointer111/spider) 衍生，保留其 MIT 版权声明；[Canvas Branch Chat](https://github.com/p4nt1um/canvas-branch-chat) 的设计与功能提供了启发。二者均是独立项目，Spider Chat 不代表原项目或 Obsidian 官方。详见 [LICENSE](LICENSE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

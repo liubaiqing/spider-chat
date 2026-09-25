@@ -13,8 +13,8 @@ describe("updateLocalizedChrome", () => {
 
     updateLocalizedChrome("en", [{ command, key: "openMap" }], ribbon as HTMLElement);
 
-    expect(command.name).toBe("Open Spider");
-    expect(attributes.get("aria-label")).toBe("Open Spider");
-    expect(attributes.get("title")).toBe("Open Spider");
+    expect(command.name).toBe("Open Spider Chat");
+    expect(attributes.get("aria-label")).toBe("Open Spider Chat");
+    expect(attributes.get("title")).toBe("Open Spider Chat");
   });
 });

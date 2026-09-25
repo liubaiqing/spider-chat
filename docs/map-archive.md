@@ -1,6 +1,6 @@
-# Spider graph archive
+# Spider Chat graph archive
 
-Spider stores each graph in one file under the vault's `Spider Graphs` folder:
+Spider Chat stores each graph in one file under the vault's `Spider Graphs` folder. This path and the `.spider.json` format are kept for compatibility with existing maps:
 
 `Spider Graphs/<URL-encoded map ID>.spider.json`
 
@@ -24,8 +24,8 @@ The UTF-8 JSON envelope is versioned:
 }
 ```
 
-`map` is the current `ChatMap` structure; the example above only illustrates the envelope, not a valid map. Spider discovers these files by scanning the folder, validates the map data, and opens them by map ID. Moving one archive to the same folder in another vault is enough to transfer its graph and chat history. Model profiles must be configured on that device before new AI requests can use them.
+`map` is the current `ChatMap` structure; the example above only illustrates the envelope, not a valid map. Spider Chat discovers these files by scanning the folder, validates the map data, and opens them by map ID. Moving one archive to the same folder in another vault is enough to transfer its graph and chat history. Model profiles must be configured on that device before new AI requests can use them.
 
-Old raw JSON maps in `.spider/maps` and `.branch-chat-map/maps` remain readable. On opening an old map, Spider saves the new archive first and then removes that map's old file. A failed new write leaves the old file available. Exports remain separate in the configured export folder.
+Old raw JSON maps in `.spider/maps` and `.branch-chat-map/maps` remain readable. On opening an old map, Spider Chat saves the new archive first and then removes that map's old file. A failed new write leaves the old file available. Exports remain separate in the configured export folder.
 
 This format makes the graph portable; it does not coordinate simultaneous edits on multiple devices or resolve file conflicts produced by a sync provider.

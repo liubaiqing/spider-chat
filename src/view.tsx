@@ -131,7 +131,7 @@ export class BranchChatMapView extends BranchChatMapBaseView {
   }
 
   protected getContentClassName(): string {
-    return "spider-map-view";
+    return "spider-chat-map-view";
   }
 
   async onOpen(): Promise<void> {
@@ -204,7 +204,7 @@ export class BranchChatMapChatView extends BranchChatMapBaseView {
   }
 
   protected getContentClassName(): string {
-    return "spider-chat-view";
+    return "spider-chat-sidebar-view";
   }
 
   protected renderApp(onController: (controller: BranchChatMapController) => void): ReactElement {

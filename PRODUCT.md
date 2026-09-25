@@ -6,11 +6,11 @@ product
 
 ## Users
 
-Spider is for Obsidian users who use AI as part of serious thinking work: graduate students, researchers, programmers, and knowledge workers. They are often reading, debugging, comparing ideas, or building notes while staying inside their vault.
+Spider Chat is for Obsidian users who use AI as part of serious thinking work: graduate students, researchers, programmers, and knowledge workers. They are often reading, debugging, comparing ideas, or building notes while staying inside their vault.
 
 ## Product Purpose
 
-Spider turns linear AI chat into a lightweight branching knowledge map. Its core job is to make follow-up questions, comparisons, backtracking, and exportable research trails feel natural, fast, and local to Obsidian. Success means users can explore a topic deeply without losing context or ending up with a messy pile of separate chat threads.
+Spider Chat turns linear AI chat into a lightweight branching knowledge map. Its core job is to make follow-up questions, comparisons, backtracking, and exportable research trails feel natural, fast, and local to Obsidian. Success means users can explore a topic deeply without losing context or ending up with a messy pile of separate chat threads.
 
 ## Brand Personality
 
@@ -18,7 +18,7 @@ Efficient, exploratory, geeky, elegant, and lightweight. The product should feel
 
 ## Anti-references
 
-Spider should not become a complex knowledge-management suite, a conventional chatbot window, a visually loud graph toy, or a tool that requires users to learn a new operating model before getting value. Avoid excessive chrome, ornamental motion, heavy onboarding, and features that bury the Tab-driven branch workflow.
+Spider Chat should not become a complex knowledge-management suite, a conventional chatbot window, a visually loud graph toy, or a tool that requires users to learn a new operating model before getting value. Avoid excessive chrome, ornamental motion, heavy onboarding, and features that bury the Tab-driven branch workflow.
 
 ## Design Principles
 

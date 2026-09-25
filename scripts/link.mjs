@@ -1,16 +1,17 @@
-import { symlink, unlink } from "node:fs/promises";
+import { mkdir, symlink, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-const vault = process.argv[2] || process.env.SPIDER_VAULT;
+const vault = process.argv[2] || process.env.SPIDER_CHAT_VAULT;
 if (!vault) {
   console.error("Usage: node scripts/link.mjs <vault-path>");
-  console.error("  or set SPIDER_VAULT env var");
+  console.error("  or set SPIDER_CHAT_VAULT env var");
   process.exit(1);
 }
 
-const pluginDir = resolve(vault, ".obsidian", "plugins", "spider");
+const pluginDir = resolve(vault, ".obsidian", "plugins", "spider-chat");
 const projectDir = resolve(import.meta.dirname, "..");
+await mkdir(pluginDir, { recursive: true });
 
 const files = ["main.js", "styles.css", "manifest.json"];
 

@@ -57,10 +57,10 @@ describe("profile API key resolution", () => {
     });
 
     const result = await resolveProfileApiKey(profile, {
-      pluginEnvPath: ".obsidian/plugins/spider/.env",
+      pluginEnvPath: ".obsidian/plugins/spider-chat/.env",
       isDesktop: true,
       isMobile: false,
-      readFile: async (path) => path.endsWith("plugins/spider/.env")
+      readFile: async (path) => path.endsWith("plugins/spider-chat/.env")
         ? "SPIDER_PROFILE_TEST_KEY=plugin-key"
         : "SPIDER_PROFILE_TEST_KEY=vault-key",
     });
@@ -71,19 +71,19 @@ describe("profile API key resolution", () => {
     process.env.SPIDER_PROFILE_TEST_KEY = "process-key";
     try {
       const vault = await resolveProfileApiKey(profile, {
-        pluginEnvPath: "plugins/spider/.env",
+        pluginEnvPath: "plugins/spider-chat/.env",
         isDesktop: false,
         isMobile: true,
         readFile: async (path) => path === ".env" ? "SPIDER_PROFILE_TEST_KEY=vault-key" : null,
       });
       const desktop = await resolveProfileApiKey(profile, {
-        pluginEnvPath: "plugins/spider/.env",
+        pluginEnvPath: "plugins/spider-chat/.env",
         isDesktop: true,
         isMobile: false,
         readFile: async () => null,
       });
       const mobile = await resolveProfileApiKey(profile, {
-        pluginEnvPath: "plugins/spider/.env",
+        pluginEnvPath: "plugins/spider-chat/.env",
         isDesktop: false,
         isMobile: true,
         readFile: async () => null,
@@ -99,7 +99,7 @@ describe("profile API key resolution", () => {
 
   it("prefers the profile key over every external source", async () => {
     const result = await resolveProfileApiKey({ ...profile, apiKey: "direct-key" }, {
-      pluginEnvPath: "plugins/spider/.env",
+      pluginEnvPath: "plugins/spider-chat/.env",
       isDesktop: true,
       isMobile: false,
       readFile: async () => "SPIDER_PROFILE_TEST_KEY=file-key",

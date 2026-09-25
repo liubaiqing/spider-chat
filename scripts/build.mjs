@@ -6,7 +6,7 @@ import { builtinModules } from "node:module";
 const prod = process.argv[2] === "production";
 const watch = process.argv.includes("--watch");
 
-const banner = "/* spider. Bundled for Obsidian. */";
+const banner = "/* Spider Chat. Bundled for Obsidian. */";
 
 async function combineStyles() {
   const chunks = [];

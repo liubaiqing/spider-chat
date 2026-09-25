@@ -433,7 +433,7 @@ describe("ViewState", () => {
     const snapshot = vs.getSnapshot();
     expect(snapshot.map?.nodes[map.rootNodeId]?.messages).toHaveLength(0);
     expect(snapshot.drafts[map.rootNodeId]).toBe("Explain retrieval augmented generation");
-    expect(snapshot.error).toBe("Missing API key. Add one in Spider settings.");
+    expect(snapshot.error).toBe("Missing API key. Add one in Spider Chat settings.");
   });
 
   it("writes one self-contained file for the markdown and mermaid formats", async () => {

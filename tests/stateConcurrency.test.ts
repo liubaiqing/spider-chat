@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OpenAICompatibleProvider } from "../src/ai/openAICompatibleProvider";
 import { addChildNode, createRootMap, updateNode } from "../src/domain/chatMap";
 import { MapDocumentRegistry } from "../src/state/mapDocument";
+import { BranchChatMapStore } from "../src/state/branchChatMapStore";
 import { ViewState } from "../src/state/viewState";
 import type BranchChatMapPlugin from "../src/main";
 import type { BranchChatMapSettings, ChatMap, ModelProfile } from "../src/types";
@@ -65,6 +66,81 @@ function createPlugin(settings: Partial<BranchChatMapSettings> = {}): BranchChat
 }
 
 describe("shared map state and generation scheduling", () => {
+  it("deletes through the store and clears every open view and saved map reference", async () => {
+    const removed = createRootMap("Removed", "Removed");
+    const remaining = createRootMap("Remaining", "Remaining");
+    const fixture = memoryRepository([removed, remaining]);
+    const plugin = createPlugin({
+      lastOpenedMapId: removed.id,
+      lastReadLocations: { [removed.id]: { nodeId: removed.rootNodeId, scrollTop: 45 } },
+    });
+    plugin.updateSettings = vi.fn(async (patch) => { Object.assign(plugin.settings, patch); });
+    const store = new BranchChatMapStore(plugin);
+    plugin.store = store;
+    Object.assign(store.repository, fixture.repository);
+    const firstId = store.prepareSessionWithMap(removed);
+    const secondId = store.prepareSessionWithMap(removed);
+    const first = store.getSession(firstId)!;
+    const second = store.getSession(secondId)!;
+    const changed = vi.fn();
+    store.subscribeMapList(changed);
+
+    try {
+      expect(await store.deleteMap(removed.id)).toBe(true);
+      await vi.waitFor(() => {
+        expect(first.getSnapshot().map?.id).toBe(remaining.id);
+        expect(second.getSnapshot().map?.id).toBe(remaining.id);
+      });
+      expect(fixture.maps.has(removed.id)).toBe(false);
+      expect(store.getOpenMaps().some((map) => map.id === removed.id)).toBe(false);
+      expect(plugin.settings.lastOpenedMapId).toBeUndefined();
+      expect(plugin.settings.lastReadLocations?.[removed.id]).toBeUndefined();
+      expect(changed).toHaveBeenCalledOnce();
+    } finally {
+      store.dispose();
+    }
+  });
+
+  it("does not recreate a map file when an empty vault is opened", async () => {
+    const fixture = memoryRepository();
+    const view = new ViewState(createPlugin(), fixture.repository);
+    try {
+      await view.load();
+      expect(view.getSnapshot().map).toBeNull();
+      expect(fixture.saves).toHaveLength(0);
+    } finally {
+      view.dispose();
+    }
+  });
+
+  it("rejects an old map load that resolves after the map was deleted", async () => {
+    const removed = createRootMap("Removed");
+    const remaining = createRootMap("Remaining");
+    const fixture = memoryRepository([removed, remaining]);
+    const delayedLoad = deferred<ChatMap | null>();
+    const plugin = createPlugin();
+    plugin.updateSettings = vi.fn(async (patch) => { Object.assign(plugin.settings, patch); });
+    const store = new BranchChatMapStore(plugin);
+    plugin.store = store;
+    Object.assign(store.repository, fixture.repository);
+    store.repository.loadMap = async (id: string) => id === removed.id ? delayedLoad.promise : fixture.maps.get(id) ?? null;
+    store.prepareSessionWithMap(removed);
+    const otherId = store.prepareSessionWithMap(remaining);
+    const otherView = store.getSession(otherId)!;
+
+    try {
+      const loading = otherView.load(removed.id);
+      expect(await store.deleteMap(removed.id)).toBe(true);
+      delayedLoad.resolve(removed);
+      await loading;
+      expect(otherView.getSnapshot().map?.id).toBe(remaining.id);
+      expect(fixture.maps.has(removed.id)).toBe(false);
+    } finally {
+      delayedLoad.resolve(removed);
+      store.dispose();
+    }
+  });
+
   it("shares one map document across views and persists revisions in order", async () => {
     const map = createRootMap("Shared map", "Shared map");
     const firstWriteStarted = deferred();
@@ -333,9 +409,13 @@ describe("shared map state and generation scheduling", () => {
     });
     const map = createRootMap("Deleted map", "Deleted map");
     const repository = memoryRepository([map]);
-    const documents = new MapDocumentRegistry(repository.repository);
-    const firstView = new ViewState(createPlugin(), repository.repository, map, documents);
-    const secondView = new ViewState(createPlugin(), repository.repository, map, documents);
+    const plugin = createPlugin();
+    plugin.updateSettings = vi.fn(async (patch) => { Object.assign(plugin.settings, patch); });
+    const store = new BranchChatMapStore(plugin);
+    plugin.store = store;
+    Object.assign(store.repository, repository.repository);
+    const firstView = store.getSession(store.prepareSessionWithMap(map))!;
+    const secondView = store.getSession(store.prepareSessionWithMap(map))!;
 
     try {
       firstView.updateDraft(map.rootNodeId, "Question");
@@ -344,13 +424,12 @@ describe("shared map state and generation scheduling", () => {
       const deleted = await firstView.deleteCurrentMap();
       expect(deleted).toBe(true);
       expect(repository.maps.has(map.id)).toBe(false);
-      const replacementId = firstView.getSnapshot().map?.id;
-      expect(replacementId).toBeTruthy();
+      expect(firstView.getSnapshot().map).toBeNull();
 
       const oldMapSaveCount = repository.saves.filter((saved) => saved.id === map.id).length;
       releaseStream.resolve();
       await sending;
-      await vi.waitFor(() => expect(secondView.getSnapshot().map?.id).toBe(replacementId));
+      await vi.waitFor(() => expect(secondView.getSnapshot().map).toBeNull());
 
       expect(repository.maps.has(map.id)).toBe(false);
       expect(repository.saves.filter((saved) => saved.id === map.id)).toHaveLength(oldMapSaveCount);
@@ -358,9 +437,7 @@ describe("shared map state and generation scheduling", () => {
     } finally {
       releaseStream.resolve();
       stream.mockRestore();
-      firstView.dispose();
-      secondView.dispose();
-      documents.dispose();
+      store.dispose();
     }
   });
 

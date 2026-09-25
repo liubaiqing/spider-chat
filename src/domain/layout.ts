@@ -3,7 +3,7 @@ import type { ChatMap, ChatNode } from "../types";
 import { markdownToPlainText } from "../utils/text";
 
 const NODE_WIDTH = 300;
-const NODE_HEIGHT = 196;
+const NODE_HEIGHT = 88;
 
 /** A sub-pixel difference is not worth a write, and a huge one means bad data. */
 const MIN_ALIGN_SHIFT = 0.5;
@@ -87,12 +87,16 @@ function estimatedLines(text: string, width: number): number {
 
 function estimatedNodeHeight(node: ChatNode): number {
   const summary = markdownToPlainText(node.summary ?? "").trim();
-  if (!summary) return NODE_HEIGHT;
-  const summaryLines = estimatedLines(summary, node.note?.trim() ? 21 : 23);
-  const noteSpace = node.note?.trim() ? 35 : 0;
   const badgeSpace = node.branchDirection || node.messages.some((message) => message.modelSnapshot) ? 22 : 0;
   const titleSpace = node.title.length > 20 ? 19 : 0;
   const anchorSpace = node.anchorText ? 16 : 0;
+  if (!summary) {
+    const note = markdownToPlainText(node.note ?? "").trim();
+    const noteSpace = note ? 25 + Math.min(3, estimatedLines(note, 23)) * 17 : 0;
+    return NODE_HEIGHT + badgeSpace + titleSpace + anchorSpace + noteSpace;
+  }
+  const summaryLines = estimatedLines(summary, node.note?.trim() ? 21 : 23);
+  const noteSpace = node.note?.trim() ? 35 : 0;
   return Math.max(NODE_HEIGHT, 125 + summaryLines * 17 + noteSpace + badgeSpace + titleSpace + anchorSpace);
 }
 

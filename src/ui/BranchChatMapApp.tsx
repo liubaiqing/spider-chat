@@ -110,9 +110,11 @@ export function BranchChatMapApp({ plugin, viewState, onController, setTabTitle,
     if (!ok) {
       return;
     }
-    const removed = await viewState.deleteCurrentMap();
-    if (removed) {
-      new Notice(t(language, "mapDeleted"));
+    try {
+      const removed = await viewState.deleteCurrentMap();
+      new Notice(t(language, removed ? "mapDeleted" : "mapFileNotFound"));
+    } catch (error: unknown) {
+      new Notice(t(language, "deleteFailed", { message: error instanceof Error ? error.message : String(error) }));
     }
   }, [language, plugin.app, viewState]);
 

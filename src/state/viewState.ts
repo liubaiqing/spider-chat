@@ -291,45 +291,7 @@ export class ViewState {
     if (!map || !this.document) {
       return false;
     }
-
-    await this.documents.invalidateAndFlush(map.id);
-    const removed = await this.repository.deleteMap(map.id);
-    if (!removed) {
-      await this.documents.forget(map.id);
-      return false;
-    }
-
-    if (this.pendingReadingLocation?.mapId === map.id) {
-      this.pendingReadingLocation = null;
-      if (this.readingSaveTimer) clearTimeout(this.readingSaveTimer);
-      this.readingSaveTimer = null;
-    }
-    for (const key of this.readingTops.keys()) {
-      if (key.startsWith(`${map.id}:`)) this.readingTops.delete(key);
-    }
-    const locations = { ...(this.plugin.settings.lastReadLocations ?? {}) };
-    if (locations[map.id]) {
-      delete locations[map.id];
-      void this.plugin.updateSettings({ lastReadLocations: locations }).catch((error: unknown) => {
-        console.error("Spider: could not clear deleted map reading position", error);
-      });
-    }
-
-    const remaining = await this.repository.listMaps();
-    if (remaining.length > 0) {
-      await this.loadLatest(++this.loadEpoch);
-    } else {
-      const language = this.plugin.settings.language;
-      const fresh = applyDagreLayout(
-        createRootMap(t(language, "defaultMapTitle"), t(language, "rootQuestionTitle")),
-      );
-      await this.repository.saveMap(fresh);
-      this.attachMap(fresh, true);
-    }
-
-    await this.documents.forget(map.id);
-
-    return true;
+    return this.plugin.store.deleteMap(map.id);
   }
 
   /**
@@ -753,14 +715,10 @@ export class ViewState {
         if (epoch !== this.loadEpoch || this.disposed) return;
       }
 
-      const language = this.plugin.settings.language;
-      const initial = loaded ?? applyDagreLayout(createRootMap(t(language, "defaultMapTitle"), t(language, "rootQuestionTitle")));
-      if (!loaded) {
-        if (epoch !== this.loadEpoch || this.disposed) return;
-        await this.repository.saveMap(initial);
-      }
       if (epoch !== this.loadEpoch || this.disposed) return;
-      this.attachMap(initial, true);
+      // An empty vault stays empty, including after the final map was deleted.
+      // A map file is created only when the user chooses New Map.
+      if (loaded && !this.documents.isBlocked(loaded.id)) this.attachMap(loaded, true);
     } catch (loadError: unknown) {
       if (epoch === this.loadEpoch && !this.disposed) this.reportError(loadError);
     }
@@ -769,7 +727,7 @@ export class ViewState {
   private async loadById(mapId: ChatMapId, epoch: number): Promise<void> {
     try {
       const loaded = await this.repository.loadMap(mapId);
-      if (!loaded || epoch !== this.loadEpoch || this.disposed) {
+      if (!loaded || epoch !== this.loadEpoch || this.disposed || this.documents.isBlocked(loaded.id)) {
         return;
       }
 
@@ -812,6 +770,15 @@ export class ViewState {
 
   private handleForgottenMap(mapId: string): void {
     if (this.disposed || this.document?.id !== mapId) return;
+    const epoch = ++this.loadEpoch;
+    if (this.pendingReadingLocation?.mapId === mapId) {
+      this.pendingReadingLocation = null;
+      if (this.readingSaveTimer) clearTimeout(this.readingSaveTimer);
+      this.readingSaveTimer = null;
+    }
+    for (const key of this.readingTops.keys()) {
+      if (key.startsWith(`${mapId}:`)) this.readingTops.delete(key);
+    }
     this.unsubscribeDocument?.();
     this.unsubscribeDocument = null;
     this.document = null;
@@ -826,7 +793,14 @@ export class ViewState {
       generationQueue: [],
     };
     this.emit();
-    void this.load();
+    // A deleted final map leaves the gallery empty; deletion must not create a new file.
+    void this.repository.loadLatestMap().then((nextMap) => {
+      if (nextMap && epoch === this.loadEpoch && !this.disposed && !this.documents.isBlocked(nextMap.id)) {
+        this.attachMap(nextMap, true);
+      }
+    }).catch((error: unknown) => {
+      if (epoch === this.loadEpoch && !this.disposed) this.reportError(error);
+    });
   }
 
   private syncDocument(): void {

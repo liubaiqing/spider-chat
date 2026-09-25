@@ -157,7 +157,7 @@ const nodeTypes = {
 
 /** Fallbacks used only before React Flow reports a measured size. */
 const FALLBACK_WIDTH = 300;
-const FALLBACK_HEIGHT = 196;
+const FALLBACK_HEIGHT = 88;
 
 interface GraphCanvasProps {
   map: ChatMap;

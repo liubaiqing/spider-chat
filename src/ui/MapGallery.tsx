@@ -29,7 +29,10 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
     });
   };
 
-  useEffect(refresh, [plugin.store]);
+  useEffect(() => {
+    refresh();
+    return plugin.store.subscribeMapList(refresh);
+  }, [plugin.store]);
 
   const handleDelete = async (e: React.MouseEvent, entry: MapEntry) => {
     e.stopPropagation();
@@ -38,7 +41,7 @@ export function MapGallery({ plugin, onSelectMap, onNewMap }: MapGalleryProps): 
     if (!ok) return;
 
     try {
-      const deleted = await plugin.store.repository.deleteMap(entry.map.id);
+      const deleted = await plugin.store.deleteMap(entry.map.id);
       if (deleted) {
         new Notice(t(language, "mapDeleted"));
         refresh();

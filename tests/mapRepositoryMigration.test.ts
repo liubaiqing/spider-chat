@@ -120,6 +120,19 @@ it("deletes every canonical and legacy copy so a map cannot reappear", async () 
   expect(await repository.loadMap(map.id)).toBeNull();
 });
 
+it("reports a failed file removal instead of claiming the map was deleted", async () => {
+  const { app, files, folders } = createMemoryApp();
+  folders.add(DATA_DIR);
+  const repository = new MapRepository(app);
+  const map = createRootMap("Protected map");
+  const path = `${DATA_DIR}/${encodeURIComponent(map.id)}.json`;
+  files.set(path, JSON.stringify(map));
+  app.vault.adapter.remove = async () => { throw new Error("permission denied"); };
+
+  await expect(repository.deleteMap(map.id)).rejects.toThrow("permission denied");
+  expect(files.has(path)).toBe(true);
+});
+
 it("keeps imported ids inside the map directory", async () => {
   const { app, files } = createMemoryApp();
   const repository = new MapRepository(app);

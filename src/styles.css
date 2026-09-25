@@ -702,7 +702,7 @@
 .bcm-graph-node {
   position: relative;
   width: 300px;
-  min-height: 196px;
+  min-height: 88px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

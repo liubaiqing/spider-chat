@@ -365,12 +365,14 @@ export class MapDocumentRegistry {
   private readonly documents = new Map<string, MapDocument>();
   private readonly scheduler = new GenerationScheduler();
   private readonly forgottenListeners = new Set<(mapId: string) => void>();
+  private readonly blockedMapIds = new Set<string>();
 
   constructor(repository: MapRepository) {
     this.repository = repository;
   }
 
   get(map: ChatMap): MapDocument {
+    if (this.blockedMapIds.has(map.id)) throw new Error("This chat map has been deleted.");
     const current = this.documents.get(map.id);
     if (current) return current;
     const document = new MapDocument(map, this.repository, this.scheduler);
@@ -393,6 +395,7 @@ export class MapDocumentRegistry {
   }
 
   async invalidateAndFlush(mapId: string): Promise<void> {
+    this.blockedMapIds.add(mapId);
     const document = this.documents.get(mapId);
     document?.invalidate();
     try {
@@ -400,6 +403,14 @@ export class MapDocumentRegistry {
     } catch {
       // The map must still be invalidated so no late generation can recreate it.
     }
+  }
+
+  isBlocked(mapId: string): boolean {
+    return this.blockedMapIds.has(mapId);
+  }
+
+  restoreAfterFailedDeletion(mapId: string): void {
+    this.blockedMapIds.delete(mapId);
   }
 
   subscribeForgotten(listener: (mapId: string) => void): () => void {
@@ -410,6 +421,7 @@ export class MapDocumentRegistry {
   dispose(): void {
     for (const document of this.documents.values()) document.invalidate();
     this.documents.clear();
+    this.blockedMapIds.clear();
     this.forgottenListeners.clear();
   }
 }

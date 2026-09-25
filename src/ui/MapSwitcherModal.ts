@@ -29,7 +29,6 @@ export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
   }
 
   async loadMaps(): Promise<void> {
-    const openMaps = this.plugin.store.getOpenMaps();
     const activeId = this.plugin.store.getActiveSession()?.getLoadedMapId() ?? null;
 
     const available = await this.plugin.store.listAvailableMaps();
@@ -48,20 +47,6 @@ export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
         summary: root?.summary || root?.messages[0]?.content || "",
         createdAt: map.createdAt,
         updatedAt: map.updatedAt,
-      });
-    }
-
-    for (const om of openMaps) {
-      if (seen.has(om.id)) continue;
-      seen.add(om.id);
-      result.push({
-        id: om.id,
-        title: om.title,
-        nodeCount: om.nodeCount,
-        rootTitle: "",
-        summary: "",
-        createdAt: "",
-        updatedAt: "",
       });
     }
 
@@ -121,7 +106,7 @@ export class MapSwitcherModal extends FuzzySuggestModal<MapItem> {
       if (!ok) return;
 
       try {
-        const removed = await this.plugin.store.repository.deleteMap(mapItem.id);
+        const removed = await this.plugin.store.deleteMap(mapItem.id);
         if (removed) {
           new Notice(t(this.language, "mapDeleted"));
         } else {

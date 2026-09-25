@@ -21,6 +21,8 @@ export class BranchChatMapStore {
   private readonly sessions = new Map<string, ViewState>();
   private activeSessionId: string | null = null;
   private readonly activeViewListeners = new Set<() => void>();
+  private readonly mapListListeners = new Set<() => void>();
+  private readonly pendingDeletions = new Map<string, Promise<boolean>>();
   private pendingSession: { id: string; vs: ViewState } | null = null;
 
   constructor(plugin: BranchChatMapPlugin) {
@@ -112,6 +114,44 @@ export class BranchChatMapStore {
     return this.repository.listMaps();
   }
 
+  /** Delete through one path so open views cannot recreate a removed map. */
+  deleteMap(mapId: ChatMapId): Promise<boolean> {
+    const pending = this.pendingDeletions.get(mapId);
+    if (pending) return pending;
+
+    const deletion = (async () => {
+      await this.documents.invalidateAndFlush(mapId);
+      try {
+        const removed = await this.repository.deleteMap(mapId);
+        if (!removed) this.documents.restoreAfterFailedDeletion(mapId);
+        if (removed) {
+          const locations = { ...(this.plugin.settings.lastReadLocations ?? {}) };
+          delete locations[mapId];
+          const patch = {
+            lastReadLocations: locations,
+            ...(this.plugin.settings.lastOpenedMapId === mapId ? { lastOpenedMapId: undefined } : {}),
+          };
+          try {
+            await this.plugin.updateSettings(patch);
+          } catch (error) {
+            console.error("Spider: could not clear deleted map settings", error);
+          }
+          for (const listener of this.mapListListeners) listener();
+        }
+        return removed;
+      } catch (error) {
+        this.documents.restoreAfterFailedDeletion(mapId);
+        throw error;
+      } finally {
+        // Also release a stale document when the file was already missing.
+        await this.documents.forget(mapId);
+      }
+    })();
+    this.pendingDeletions.set(mapId, deletion);
+    void deletion.finally(() => this.pendingDeletions.delete(mapId)).catch(() => undefined);
+    return deletion;
+  }
+
   async switchActiveMap(mapId: ChatMapId): Promise<void> {
     const active = this.getActiveSession();
     if (!active) {
@@ -128,12 +168,18 @@ export class BranchChatMapStore {
     };
   }
 
+  subscribeMapList(listener: () => void): () => void {
+    this.mapListListeners.add(listener);
+    return () => this.mapListListeners.delete(listener);
+  }
+
   dispose(): void {
     for (const vs of this.sessions.values()) {
       vs.dispose();
     }
     this.sessions.clear();
     this.activeViewListeners.clear();
+    this.mapListListeners.clear();
     this.documents.dispose();
   }
 }

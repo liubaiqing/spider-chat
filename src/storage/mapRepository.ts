@@ -61,9 +61,13 @@ export class MapRepository {
         if (isChatMap(current) && current.id === mapId) {
           await this.app.vault.adapter.remove(stored.path);
         }
-      } catch {
-        // A stale or unreadable path is not a reason to delete another file.
+      } catch (error) {
+        // A missing path is harmless, but an actual deletion failure must reach the UI.
+        if (await this.app.vault.adapter.exists(stored.path)) throw error;
       }
+    }
+    if ((await this.readAllMaps(true)).some(({ map }) => map.id === mapId)) {
+      throw new Error(`Map ${mapId} still has a stored copy after deletion`);
     }
     return true;
   }

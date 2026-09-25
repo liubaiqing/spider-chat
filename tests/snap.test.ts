@@ -81,6 +81,14 @@ describe("smart guides", () => {
     expect(linked.horizontal).toEqual([412]);
   });
 
+  it("aligns the actual connection handles when their offsets differ from card centres", () => {
+    const moving = { ...box("child", 520, 71.5, 300, 88), connectionOffsetY: 43.833 };
+    const parent = { ...box("parent", 100, 0, 300, 231), connectionOffsetY: 115.166 };
+    const result = snapToGuides(moving, [parent], { connected: new Set(["parent"]) });
+    expect(result.y).toBeCloseTo(115.166 - 43.833, 6);
+    expect(result.horizontal).toEqual([115.166]);
+  });
+
   it("falls back to ordinary axes when no connected neighbour is near", () => {
     const moving = box("moving", 100, 300, 300, 200);
     const result = snapToGuides(moving, [box("parent", 300, 900), box("other", 103, 0)], {

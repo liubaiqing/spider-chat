@@ -4,6 +4,8 @@ export interface SnapBox {
   y: number;
   width: number;
   height: number;
+  /** Actual connection handle centre relative to the card's flow position. */
+  connectionOffsetY?: number;
 }
 
 export interface SnapResult {
@@ -112,8 +114,8 @@ export function snapToGuides(
       }
     }
     if (connected.has(other.id) && horizontalGap <= connectedGuideDistance) {
-      const guide = other.y + other.height / 2;
-      const delta = guide - (moving.y + moving.height / 2);
+      const guide = other.y + (other.connectionOffsetY ?? other.height / 2);
+      const delta = guide - (moving.y + (moving.connectionOffsetY ?? moving.height / 2));
       if (Math.abs(delta) <= connectedThreshold) {
         yCandidates.push({ delta, guide, priority: 0, distance: horizontalGap });
       }

@@ -37,6 +37,42 @@ createRoot(document.querySelector("#app")).render(
 );
 window.graphChecks = { vs, rootId: root.rootNodeId, openId: first.child.id, understoodId: second.child.id, deepId: third.child.id };
 
+let armedAlignment = null;
+document.querySelector("#make-tall").addEventListener("click", () => {
+  vs.updateNodeSummary(root.rootNodeId, "用户请求解释广义相对论，助手围绕等效原理、爱因斯坦场方程、关键预言及适用范围作了系统阐述。".repeat(3));
+  armedAlignment = { started: false, beforeY: nodeElement(first.child.id).getBoundingClientRect().top };
+  document.querySelector("#result").textContent = "Drag the first child about 40px right and 72px down...";
+});
+
+window.addEventListener("mousedown", (event) => {
+  if (armedAlignment && event.target.closest?.(`.react-flow__node[data-id='${first.child.id}']`)) armedAlignment.started = true;
+}, true);
+
+window.addEventListener("mouseup", async () => {
+  const check = armedAlignment;
+  if (!check?.started) return;
+  armedAlignment = null;
+  await delay(100);
+  const result = document.querySelector("#result");
+  try {
+    const parent = nodeElement(root.rootNodeId);
+    const child = nodeElement(first.child.id);
+    const source = parent.querySelector(".react-flow__handle-right").getBoundingClientRect();
+    const target = child.querySelector(".react-flow__handle-left").getBoundingClientRect();
+    const delta = Math.abs((source.top + source.height / 2) - (target.top + target.height / 2));
+    assert(child.getBoundingClientRect().top - check.beforeY > 50, "short card was dragged toward the tall card's axis");
+    assert(delta < 0.1, `handle centres differ by ${delta.toFixed(3)}px`);
+    const path = document.querySelector(".react-flow__edge-path");
+    const total = path.getTotalLength();
+    const sampledY = Array.from({ length: 11 }, (_, index) => path.getPointAtLength(total * index / 10).y);
+    assert(Math.max(...sampledY) - Math.min(...sampledY) < 0.01, "edge path is not horizontal");
+    result.textContent = "PASS unequal-height handles · straight edge path";
+  } catch (error) {
+    result.textContent = `FAIL ${error.message}`;
+    console.error(error);
+  }
+}, true);
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 const nodeElement = (id) => [...document.querySelectorAll(".react-flow__node[data-id]")].find((element) => element.dataset.id === id);

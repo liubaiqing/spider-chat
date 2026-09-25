@@ -273,7 +273,7 @@ function GraphCanvasInner({
   const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; nodeId: NodeId; x: number; y: number } | null>(null);
   const lastMenuRef = useRef<{ nodeId: NodeId; time: number; source: "touch" | "other" } | null>(null);
   const suppressClickRef = useRef<{ nodeId: NodeId; until: number } | null>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, getInternalNode } = useReactFlow<BranchFlowNode, Edge>();
   const [searchTargetId, setSearchTargetId] = useState<NodeId | null>(null);
   const handledSearchToken = useRef<number | null>(null);
   const searchHighlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -582,7 +582,13 @@ function GraphCanvasInner({
     return index;
   }, [map.edges]);
 
-  const toSnapBoxes = (list: readonly BranchFlowNode[], excludeId: string): SnapBox[] => list
+  const connectionOffsetY = (nodeId: NodeId): number | undefined => {
+    const bounds = getInternalNode(nodeId)?.internals.handleBounds;
+    const handle = bounds?.source?.[0] ?? bounds?.target?.[0];
+    return handle ? handle.y + handle.height / 2 : undefined;
+  };
+
+  const toSnapBoxes = (list: readonly BranchFlowNode[], excludeId: string, connected?: ReadonlySet<NodeId>): SnapBox[] => list
     .filter((candidate) => candidate.id !== excludeId)
     .map((candidate) => ({
       id: candidate.id,
@@ -590,6 +596,7 @@ function GraphCanvasInner({
       y: candidate.position.y,
       width: candidate.measured?.width ?? FALLBACK_WIDTH,
       height: candidate.measured?.height ?? FALLBACK_HEIGHT,
+      connectionOffsetY: connected?.has(candidate.id) ? connectionOffsetY(candidate.id) : undefined,
     }));
 
   /** Magnetic alignment: rewrite the position React Flow is about to apply. */
@@ -606,14 +613,16 @@ function GraphCanvasInner({
     const adjusted = changes.map((change) => {
       if (change.type !== "position" || !change.dragging || !change.position) return change;
       const dragged = nodesRef.current.find((candidate) => candidate.id === change.id);
+      const connected = connections.get(change.id);
       const result = snapToGuides({
         id: change.id,
         x: change.position.x,
         y: change.position.y,
         width: dragged?.measured?.width ?? FALLBACK_WIDTH,
         height: dragged?.measured?.height ?? FALLBACK_HEIGHT,
-      }, toSnapBoxes(nodesRef.current, change.id), {
-        connected: connections.get(change.id),
+        connectionOffsetY: connectionOffsetY(change.id),
+      }, toSnapBoxes(nodesRef.current, change.id, connected), {
+        connected,
         threshold: SNAP_THRESHOLD / zoom,
         connectedThreshold: CONNECTED_SNAP_THRESHOLD / zoom,
         maxGuideDistance: SNAP_GUIDE_DISTANCE / zoom,

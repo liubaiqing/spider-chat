@@ -711,13 +711,12 @@
   padding: 12px 14px 13px;
   background: var(--bcm-panel);
   box-shadow: 0 1px 3px color-mix(in srgb, rgb(0 0 0), transparent 92%);
-  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
 .bcm-graph-node:hover {
   border-color: var(--bcm-border);
   background: color-mix(in srgb, var(--bcm-panel) 96%, var(--bcm-panel-soft));
-  transform: translateY(-1px);
   box-shadow: 0 3px 8px color-mix(in srgb, rgb(0 0 0), transparent 92%);
 }
 

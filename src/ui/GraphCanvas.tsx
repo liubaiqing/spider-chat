@@ -18,7 +18,7 @@ import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type Re
 import { branchesCountLabel, displayTitle, statusLabel, t } from "../i18n";
 import type { AppLanguage, ChatMap, ChatNode, ModelProfile, NodeId } from "../types";
 import { alignSingleChildRows } from "../domain/layout";
-import { NO_GUIDES, snapToGuides, type SnapBox } from "../domain/snap";
+import { CONNECTED_GUIDE_DISTANCE, CONNECTED_SNAP_THRESHOLD, NO_GUIDES, SNAP_GUIDE_DISTANCE, SNAP_THRESHOLD, snapToGuides, type SnapBox } from "../domain/snap";
 import { markdownToPlainText, truncateText } from "../utils/text";
 import { NodeNotePopover } from "./NodeNotePopover";
 import type { NodeGenerationJob } from "./NodeDetails";
@@ -517,9 +517,24 @@ function GraphCanvasInner({
   const { x: viewportX, y: viewportY, zoom } = useViewport();
   // Sizes of the other cards are stable during a drag, so a ref is enough here.
   const nodesRef = useRef<BranchFlowNode[]>(computedNodes);
+  const draggingIds = useRef(new Set<NodeId>());
+  const dragPositions = useRef(new Map<NodeId, { x: number; y: number }>());
 
   useEffect(() => {
-    setNodes(computedNodes);
+    setNodes((current) => {
+      const previousById = new Map(current.map((node) => [node.id, node]));
+      return computedNodes.map((node) => {
+        const previous = previousById.get(node.id);
+        if (!previous || !draggingIds.current.has(node.id)) return node;
+        // Keep the live position when a message, status, or selection changes mid-drag.
+        return {
+          ...node,
+          position: dragPositions.current.get(node.id) ?? previous.position,
+          measured: previous.measured,
+          dragging: previous.dragging,
+        };
+      });
+    });
   }, [computedNodes]);
 
   useEffect(() => {
@@ -580,6 +595,9 @@ function GraphCanvasInner({
   /** Magnetic alignment: rewrite the position React Flow is about to apply. */
   const applySnap = (changes: NodeChange<BranchFlowNode>[]): NodeChange<BranchFlowNode>[] => {
     if (!snapEnabled) {
+      for (const change of changes) {
+        if (change.type === "position" && change.dragging && change.position) dragPositions.current.set(change.id, change.position);
+      }
       setGuides((current) => (current.vertical.length || current.horizontal.length ? { vertical: NO_GUIDES, horizontal: NO_GUIDES } : current));
       return changes;
     }
@@ -596,11 +614,17 @@ function GraphCanvasInner({
         height: dragged?.measured?.height ?? FALLBACK_HEIGHT,
       }, toSnapBoxes(nodesRef.current, change.id), {
         connected: connections.get(change.id),
+        threshold: SNAP_THRESHOLD / zoom,
+        connectedThreshold: CONNECTED_SNAP_THRESHOLD / zoom,
+        maxGuideDistance: SNAP_GUIDE_DISTANCE / zoom,
+        connectedGuideDistance: CONNECTED_GUIDE_DISTANCE / zoom,
       });
       if (result.vertical.length || result.horizontal.length) {
         next = { vertical: result.vertical, horizontal: result.horizontal };
       }
-      return { ...change, position: { x: result.x, y: result.y } };
+      const position = { x: result.x, y: result.y };
+      dragPositions.current.set(change.id, position);
+      return { ...change, position };
     });
 
     setGuides((current) => (current.vertical.join() === next.vertical.join()
@@ -749,9 +773,16 @@ function GraphCanvasInner({
         onPaneClick={() => setPinnedNoteNodeId(null)}
         onNodeDragStop={(_event, node) => {
           setGuides({ vertical: NO_GUIDES, horizontal: NO_GUIDES });
-          onPositionChange(node.id, node.position);
+          draggingIds.current.delete(node.id);
+          const position = dragPositions.current.get(node.id) ?? node.position;
+          dragPositions.current.delete(node.id);
+          onPositionChange(node.id, position);
         }}
-        onNodeDragStart={clearLongPress}
+        onNodeDragStart={(_event, node) => {
+          clearLongPress();
+          draggingIds.current.add(node.id);
+          dragPositions.current.set(node.id, node.position);
+        }}
         onNodesChange={(changes: NodeChange<BranchFlowNode>[]) => {
           // Snapping and guide updates happen before the updater: an updater must stay
           // pure, and calling setGuides inside it would re-run the whole node array on

@@ -15,7 +15,7 @@ describe("smart guides", () => {
 
   it("aligns centres even when the cards have different widths", () => {
     const moving = box("moving", 250, 0, 200, 100);
-    const other = box("other", 200, 500, 300, 100);
+    const other = box("other", 200, 320, 300, 100);
 
     // moving centre is 350, other centre is 350 -> already aligned
     expect(snapToGuides(moving, [other]).x).toBe(250);
@@ -41,7 +41,10 @@ describe("smart guides", () => {
   });
 
   it("snaps both directions independently", () => {
-    const result = snapToGuides(box("moving", 97, 298), [box("other", 100, 300)]);
+    const result = snapToGuides(box("moving", 97, 298), [
+      box("same-column", 100, 600),
+      box("same-row", 500, 300),
+    ]);
 
     expect(result.x).toBe(100);
     expect(result.y).toBe(300);
@@ -58,9 +61,8 @@ describe("smart guides", () => {
 
   it("prefers a connected neighbour's centre over a closer unrelated axis", () => {
     const moving = box("moving", 100, 300, 300, 200); // centre 400
-    // The stranger is nearer (its top edge is 1 unit away) but the parent is what
-    // makes the link straight, so the parent's centre has to win.
-    const result = snapToGuides(moving, [box("stranger", 100, 299), box("parent", 300, 305)], {
+    // The stranger is nearer, but the connected parent straightens the link.
+    const result = snapToGuides(moving, [box("stranger", 520, 299), box("parent", 750, 305)], {
       connected: new Set(["parent"]),
     });
 
@@ -70,7 +72,7 @@ describe("smart guides", () => {
 
   it("reaches further for a connected neighbour than for an unrelated card", () => {
     const moving = box("moving", 100, 300, 300, 200); // centre 400
-    const parent = box("parent", 300, 312); // centre 412, twelve units away
+    const parent = box("parent", 520, 312); // centre 412, twelve units away
 
     expect(snapToGuides(moving, [parent]).y).toBe(300);
 
@@ -90,9 +92,35 @@ describe("smart guides", () => {
   });
 
   it("draws a single guide per axis even when several cards share the column", () => {
-    const result = snapToGuides(box("moving", 101, 0), [box("a", 100, 500), box("b", 100, 1400)]);
+    const result = snapToGuides(box("moving", 101, 0), [box("a", 100, 400), box("b", 100, 1400)]);
 
     expect(result.vertical).toEqual([100]);
     expect(result.horizontal).toEqual([]);
+  });
+
+  it("ignores a matching axis on a distant card", () => {
+    const result = snapToGuides(box("moving", 103, 0), [box("far-away", 100, 1500)]);
+    expect(result.x).toBe(103);
+    expect(result.vertical).toEqual([]);
+  });
+
+  it("does not pull a card on top of another card", () => {
+    const result = snapToGuides(box("moving", 103, 100), [box("occupied", 100, 100)]);
+    expect(result).toEqual({ x: 103, y: 100, vertical: [], horizontal: [] });
+  });
+
+  it("keeps the same screen-space threshold at different zoom levels", () => {
+    for (const zoom of [0.25, 1, 1.7]) {
+      const near = snapToGuides(box("moving", 100 + 7 / zoom, 0), [box("other", 100, 350)], {
+        threshold: 8 / zoom,
+        maxGuideDistance: 280 / zoom,
+      });
+      const far = snapToGuides(box("moving", 100 + 12 / zoom, 0), [box("other", 100, 350)], {
+        threshold: 8 / zoom,
+        maxGuideDistance: 280 / zoom,
+      });
+      expect(near.x).toBe(100);
+      expect(far.x).toBe(100 + 12 / zoom);
+    }
   });
 });

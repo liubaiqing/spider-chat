@@ -553,7 +553,8 @@ export class ViewState {
 
   updatePosition(nodeId: NodeId, position: { x: number; y: number }): void {
     const { map } = this.state;
-    if (!map) {
+    const node = map?.nodes[nodeId];
+    if (!node || (Math.abs(node.position.x - position.x) < 0.01 && Math.abs(node.position.y - position.y) < 0.01)) {
       return;
     }
 

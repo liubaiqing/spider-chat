@@ -96,3 +96,53 @@ document.querySelector("#run-graph").addEventListener("click", async () => {
     console.error(error);
   }
 });
+
+let armedDrag = null;
+document.querySelector("#run-snap").addEventListener("click", () => {
+  armedDrag = {
+    before: nodeElement(root.rootNodeId).getBoundingClientRect(),
+    storedBefore: vs.getSnapshot().map.nodes[root.rootNodeId].position,
+    started: false,
+    updated: false,
+    guideSeen: false,
+  };
+  document.querySelector("#result").textContent = "Drag the root card about 40px right and 6px down...";
+});
+
+window.addEventListener("mousedown", (event) => {
+  if (!armedDrag || !event.target.closest?.(`.react-flow__node[data-id='${root.rootNodeId}']`)) return;
+  armedDrag.started = true;
+}, true);
+
+window.addEventListener("mousemove", () => {
+  if (!armedDrag?.started) return;
+  armedDrag.guideSeen ||= document.querySelectorAll(".bcm-snap-guide").length > 0;
+  if (!armedDrag.updated) {
+    armedDrag.updated = true;
+    vs.updateCurrentNodeStatus("understood");
+  }
+}, true);
+
+window.addEventListener("mouseup", async () => {
+  const check = armedDrag;
+  if (!check?.started) return;
+  armedDrag = null;
+  await delay(100);
+  const result = document.querySelector("#result");
+  try {
+    const after = nodeElement(root.rootNodeId).getBoundingClientRect();
+    const storedAfter = vs.getSnapshot().map.nodes[root.rootNodeId].position;
+    assert(after.left - check.before.left > 25, "card moves after a mid-drag update");
+    assert(Math.abs(after.top - check.before.top) < 2, "connected card snaps to its row");
+    assert(storedAfter.x - check.storedBefore.x > 20 && Math.abs(storedAfter.y - check.storedBefore.y) < 2, "snapped position is saved");
+    assert(check.updated && vs.getSnapshot().map.nodes[root.rootNodeId].status === "understood", "mid-drag update survives");
+    assert(check.guideSeen, "guide appears during drag");
+    assert(document.querySelectorAll(".bcm-snap-guide").length === 0, "guides clear after drag");
+    result.textContent = "PASS actual drag · mid-drag update · snap guide · saved position";
+  } catch (error) {
+    result.textContent = `FAIL ${error.message}`;
+    console.error(error);
+  } finally {
+    vs.updateCurrentNodeStatus("open");
+  }
+}, true);

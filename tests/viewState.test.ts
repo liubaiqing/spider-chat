@@ -46,6 +46,20 @@ function createViewState(
 }
 
 describe("ViewState", () => {
+  it("does not mark a click without movement as a manual layout", () => {
+    const map = createRootMap("Position", "Position");
+    const vs = createViewState(map);
+    try {
+      const original = map.nodes[map.rootNodeId]!.position;
+      vs.updatePosition(map.rootNodeId, original);
+      expect(vs.getSnapshot().hasManualPositions).toBe(false);
+      vs.updatePosition(map.rootNodeId, { x: original.x + 30, y: original.y });
+      expect(vs.getSnapshot().hasManualPositions).toBe(true);
+    } finally {
+      vs.dispose();
+    }
+  });
+
   it("keeps a selected-text branch title after the assistant answers", async () => {
     const map = createRootMap("Topic", "Topic");
     const vs = createViewState(map, { streamResponses: false });

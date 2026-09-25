@@ -2092,11 +2092,30 @@
   stroke-width: 2.2;
 }
 
-.react-flow__controls {
+.bcm-graph .react-flow__controls {
+  gap: 7px;
+  box-shadow: none;
+}
+
+.bcm-graph .react-flow__controls-button,
+.bcm-graph .react-flow__controls-button:last-child {
+  width: 38px;
+  height: 38px;
+  padding: 8px;
   border: 1px solid var(--bcm-border-subtle);
   border-radius: var(--bcm-radius);
-  overflow: hidden;
+  background: var(--bcm-panel);
   box-shadow: var(--bcm-shadow-md);
+}
+
+.bcm-graph .react-flow__controls-button svg {
+  max-width: 16px;
+  max-height: 16px;
+}
+
+.bcm-graph .react-flow__controls-button:focus-visible {
+  outline: 2px solid var(--bcm-accent);
+  outline-offset: 2px;
 }
 
 .react-flow__minimap {
@@ -2177,11 +2196,6 @@
 
   .react-flow__minimap {
     display: none;
-  }
-
-  .react-flow__controls {
-    transform: scale(0.88);
-    transform-origin: bottom left;
   }
 
   .bcm-detail {

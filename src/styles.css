@@ -2104,6 +2104,14 @@
   border-radius: var(--bcm-radius);
   overflow: hidden;
   background: var(--bcm-panel);
+  opacity: 0.6;
+  transition: opacity 160ms ease;
+}
+
+.react-flow__minimap:hover,
+.react-flow__minimap:focus-within,
+.react-flow__minimap:active {
+  opacity: 1;
 }
 
 .react-flow__attribution {

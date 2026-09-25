@@ -1,7 +1,13 @@
 import { normalizePath, type App } from "obsidian";
-import { DATA_DIR, LEGACY_DATA_DIR } from "../constants";
-import { isChatMap } from "../domain/guards";
+import { DATA_DIR, LEGACY_DATA_DIR, MAP_ARCHIVE_SUFFIX, PREVIOUS_DATA_DIR } from "../constants";
 import type { ChatMap } from "../types";
+import { parseMapArchive, serializeMapArchive } from "./mapArchive";
+
+const MAP_DIRS = [DATA_DIR, PREVIOUS_DATA_DIR, LEGACY_DATA_DIR] as const;
+
+function isMapFile(dir: string, path: string): boolean {
+  return path.endsWith(dir === DATA_DIR ? MAP_ARCHIVE_SUFFIX : ".json");
+}
 
 interface StoredMap {
   map: ChatMap;
@@ -57,8 +63,8 @@ export class MapRepository {
     for (const stored of matching) {
       try {
         const raw = await this.app.vault.adapter.read(stored.path);
-        const current = JSON.parse(raw) as unknown;
-        if (isChatMap(current) && current.id === mapId) {
+        const current = parseMapArchive(raw);
+        if (current?.id === mapId) {
           await this.app.vault.adapter.remove(stored.path);
         }
       } catch (error) {
@@ -79,7 +85,7 @@ export class MapRepository {
     // write so a later, newer revision can still be persisted.
     const write = prior.catch(() => undefined).then(async () => {
       await this.ensureDataDir();
-      await this.app.vault.adapter.write(path, `${JSON.stringify(map, null, 2)}\n`);
+      await this.app.vault.adapter.write(path, serializeMapArchive(map));
       await this.removeMigratedLegacyCopies(map);
     });
     this.saveTails.set(map.id, write);
@@ -119,23 +125,23 @@ export class MapRepository {
     }
     // encodeURIComponent keeps arbitrary imported ids in one path segment. The
     // suffix makes even ids such as `..` ordinary filenames.
-    return normalizePath(`${DATA_DIR}/${encodeURIComponent(mapId)}.json`);
+    return normalizePath(`${DATA_DIR}/${encodeURIComponent(mapId)}${MAP_ARCHIVE_SUFFIX}`);
   }
 
   private async findMap(mapId: string): Promise<StoredMap | null> {
     const canonicalPath = this.mapPath(mapId);
-    for (const dir of [DATA_DIR, LEGACY_DATA_DIR]) {
+    for (const dir of MAP_DIRS) {
       if (!(await this.app.vault.adapter.exists(dir))) continue;
       const listed = await this.app.vault.adapter.list(dir);
       const paths = dir === DATA_DIR
-        ? [canonicalPath, ...listed.files.filter((path) => path.endsWith(".json") && path !== canonicalPath)]
-        : listed.files.filter((path) => path.endsWith(".json"));
+        ? [canonicalPath, ...listed.files.filter((path) => isMapFile(dir, path) && path !== canonicalPath)]
+        : listed.files.filter((path) => isMapFile(dir, path));
       for (const path of paths) {
         if (path !== canonicalPath && !listed.files.includes(path)) continue;
         try {
           const raw = await this.app.vault.adapter.read(path);
-          const parsed = JSON.parse(raw) as unknown;
-          if (isChatMap(parsed) && parsed.id === mapId) {
+          const parsed = parseMapArchive(raw);
+          if (parsed?.id === mapId) {
             return { map: parsed, path, canonical: path === canonicalPath };
           }
         } catch {
@@ -151,15 +157,15 @@ export class MapRepository {
     const maps: StoredMap[] = [];
     const canonicalIds = new Set<string>();
 
-    for (const dir of [DATA_DIR, LEGACY_DATA_DIR]) {
+    for (const dir of MAP_DIRS) {
       if (!(await this.app.vault.adapter.exists(dir))) continue;
       const listed = await this.app.vault.adapter.list(dir);
       for (const path of listed.files) {
-        if (!path.endsWith(".json")) continue;
+        if (!isMapFile(dir, path)) continue;
         try {
           const raw = await this.app.vault.adapter.read(path);
-          const parsed = JSON.parse(raw) as unknown;
-          if (!isChatMap(parsed)) continue;
+          const parsed = parseMapArchive(raw);
+          if (!parsed) continue;
           const canonical = path === this.mapPath(parsed.id);
           if (canonical) canonicalIds.add(parsed.id);
           maps.push({ map: parsed, path, canonical });
@@ -190,15 +196,15 @@ export class MapRepository {
 
   private async removeMigratedLegacyCopies(map: ChatMap): Promise<void> {
     const canonicalPath = this.mapPath(map.id);
-    for (const dir of [DATA_DIR, LEGACY_DATA_DIR]) {
+    for (const dir of [PREVIOUS_DATA_DIR, LEGACY_DATA_DIR]) {
       if (!(await this.app.vault.adapter.exists(dir))) continue;
       const listed = await this.app.vault.adapter.list(dir);
       for (const path of listed.files) {
-        if (!path.endsWith(".json") || path === canonicalPath) continue;
+        if (!isMapFile(dir, path) || path === canonicalPath) continue;
         try {
           const raw = await this.app.vault.adapter.read(path);
-          const parsed = JSON.parse(raw) as unknown;
-          if (isChatMap(parsed) && parsed.id === map.id) {
+          const parsed = parseMapArchive(raw);
+          if (parsed?.id === map.id) {
             await this.app.vault.adapter.remove(path);
           }
         } catch {

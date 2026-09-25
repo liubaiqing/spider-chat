@@ -100,7 +100,7 @@ Spider Maps/
 ### 🔐 Privacy & Network Disclosure
 - The plugin **requires network** to call AI, but **you fully control which endpoint**
 - **API keys stay local** in Obsidian plugin settings or a selected `.env` source; requests send the key only to the endpoint you configure
-- **Maps are 100% local**: stored as `.spider/maps/*.json`, syncable via Obsidian Sync
+- **Maps are 100% local**: each graph and its chat history live in one portable `Spider Graphs/<map-id>.spider.json` file in the vault. Sync or copy that file to another device's vault to make the graph available there. Model API keys stay in local plugin settings.
 - **Offline-capable**: knowledge graph, navigation, export, history — everything works offline. Only "send message" needs network.
 
 ### 🌐 Bilingual UI

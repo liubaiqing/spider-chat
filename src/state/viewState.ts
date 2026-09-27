@@ -884,6 +884,7 @@ export class ViewState {
   }
 
   private getMissingProfileConfiguration(profile: ModelProfile): "apiBaseUrl" | "apiKey" | "model" | null {
+    if (profile.provider === "codex-app-server") return profile.model.trim() ? null : "model";
     if (!profile.baseUrl.trim()) return "apiBaseUrl";
     if (!profile.apiKey.trim()) return "apiKey";
     if (!profile.model.trim()) return "model";

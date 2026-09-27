@@ -15,6 +15,7 @@ import { createRootMap } from "./domain/chatMap";
 import { applyDagreLayout } from "./domain/layout";
 import { updateLocalizedChrome, type LocalizedCommand } from "./localizedChrome";
 import { resolveProfileApiKey } from "./ai/profileKeys";
+import { disposeCodexConnections } from "./ai/codexAppServer";
 import { openExportPicker } from "./ui/ExportFormatModal";
 import type { ViewState } from "./state/viewState";
 
@@ -136,6 +137,7 @@ export default class BranchChatMapPlugin extends Plugin {
 
   onunload(): void {
     this.store.dispose();
+    disposeCodexConnections();
   }
 
   async loadSettings(): Promise<void> {
@@ -361,5 +363,6 @@ export default class BranchChatMapPlugin extends Plugin {
 }
 
 function isProfileReady(profile: ModelProfile): boolean {
+  if (profile.provider === "codex-app-server") return Boolean(profile.model.trim());
   return Boolean(profile.baseUrl.trim() && profile.model.trim() && profile.apiKey.trim());
 }

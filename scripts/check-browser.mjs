@@ -14,6 +14,7 @@ const build = await context({
   },
   outdir,
   bundle: true,
+  external: ["child_process", "fs", "path", "os"],
   format: "esm",
   alias: { obsidian: resolve("tests/browser/obsidian.js") },
 });

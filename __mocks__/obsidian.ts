@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+export const Platform = { isDesktop: true, isMobile: false };
 
 export const requestUrl = vi.fn(async () => ({
   status: 200,

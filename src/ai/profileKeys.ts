@@ -12,6 +12,7 @@ export async function resolveProfileApiKey(
   profile: ModelProfile,
   options: ProfileKeyResolverOptions,
 ): Promise<string> {
+  if (profile.provider === "codex-app-server") return "";
   const directKey = profile.apiKey.trim();
   if (directKey) {
     return directKey;

@@ -83,6 +83,7 @@ class Menu {
 }
 class App {
 }
+export const Platform = { isDesktop: false, isMobile: true };
 const normalizePath = (path) => path;
 const requestUrl = async () => {
   throw new Error("Network disabled in UI test");

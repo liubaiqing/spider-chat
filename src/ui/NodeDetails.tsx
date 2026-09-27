@@ -150,9 +150,10 @@ export function NodeDetails({
   const currentModelLabel = selectedProfile ? modelLabelOf(selectedProfile) : t(language, "defaultModelOption");
   const contextLabel = t(language, CONTEXT_LABEL_KEYS[contextMode]);
   const canSendWithSelectedProfile = canUseAi || Boolean(
-    selectedProfile?.baseUrl.trim()
+    (selectedProfile?.provider === "codex-app-server" && selectedProfile.model.trim())
+    || (selectedProfile?.baseUrl.trim()
     && selectedProfile.model.trim()
-    && (selectedProfile.apiKey.trim() || selectedProfile.apiKeyEnvVar?.trim()),
+    && (selectedProfile.apiKey.trim() || selectedProfile.apiKeyEnvVar?.trim())),
   );
   const isJobPending = generationJob?.status === "queued" || generationJob?.status === "running";
   const nodeError = generationJob?.status === "error" ? generationJob.error ?? error : error;

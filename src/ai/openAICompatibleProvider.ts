@@ -2,6 +2,7 @@ import { requestUrl } from "obsidian";
 import type { AiChatRequest, AiProvider, AppLanguage, BranchChatMapSettings, ChatMessage, ChatNode, ModelProfile } from "../types";
 import { normalizeApiBaseUrl, resolveThinkingStyle } from "../settingsDefaults";
 import { t } from "../i18n";
+import { listCodexModels, streamCodex, testCodexConnection } from "./codexAppServer";
 
 /** Reasoning models disagree on the field name, so every known spelling is read. */
 interface ReasoningFields {
@@ -318,6 +319,14 @@ export class OpenAICompatibleProvider implements AiProvider {
   async testConnection(profileOrSignal?: ModelProfile | AbortSignal, maybeSignal?: AbortSignal): Promise<ApiTestResult> {
     const profile = isModelProfile(profileOrSignal) ? profileOrSignal : undefined;
     const signal = profile ? maybeSignal : profileOrSignal as AbortSignal | undefined;
+    if (profile?.provider === "codex-app-server") {
+      try {
+        await testCodexConnection(profile, signal);
+        return { ok: true, message: this.settings.language === "zh-CN"
+          ? "Codex 已连接，ChatGPT 登录和所选模型可用。"
+          : "Codex connected. ChatGPT login and the selected model are available." };
+      } catch (error) { return errorToTestResult(error, this.settings.language); }
+    }
     const validation = validateSettings(this.settings, profile);
     if (validation) {
       return validation;
@@ -354,6 +363,7 @@ export class OpenAICompatibleProvider implements AiProvider {
   }
 
   async listModels(profile?: ModelProfile): Promise<string[]> {
+    if (profile?.provider === "codex-app-server") return (await listCodexModels(profile)).map((item) => item.model);
     const config = this.getRequestConfig(profile?.model ?? this.settings.model, profile);
     if (!config.baseUrl) {
       throw new AiRequestError(t(this.settings.language, "missingApiBaseUrl"));
@@ -388,6 +398,11 @@ export class OpenAICompatibleProvider implements AiProvider {
     onReasoning?: (text: string) => void,
     bodyExtras: Record<string, unknown> = {},
   ): Promise<string> {
+    if (profile?.provider === "codex-app-server") {
+      let answer = "";
+      for await (const chunk of streamCodex(messages, profile, signal, onReasoning)) answer += chunk;
+      return answer.trim();
+    }
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
       throw new AiRequestError(t(this.settings.language, "missingApiKey"));
@@ -457,6 +472,10 @@ export class OpenAICompatibleProvider implements AiProvider {
     onReasoning?: (text: string) => void,
     bodyExtras: Record<string, unknown> = {},
   ): AsyncGenerator<string> {
+    if (profile?.provider === "codex-app-server") {
+      yield* streamCodex(messages, profile, signal, onReasoning);
+      return;
+    }
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
       throw new AiRequestError(t(this.settings.language, "missingApiKey"));

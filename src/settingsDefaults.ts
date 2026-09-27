@@ -29,6 +29,8 @@ export function detectThinkingStyle(baseUrl: string): ThinkingParamStyle {
 
 /** Resolve the effective switch: an explicit profile choice wins over detection. */
 export function resolveThinkingStyle(profile?: ModelProfile | null): ThinkingParamStyle {
+  // Codex uses a per-model effort selector, not an on/off reasoning switch.
+  if (profile?.provider === "codex-app-server") return "none";
   const configured = profile?.thinkingParamStyle;
   if (configured && configured !== "auto") {
     return configured;
@@ -173,6 +175,7 @@ export function resolveContextMode(settings: BranchChatMapSettings, override?: C
 
 export function getMissingAiConfiguration(settings: BranchChatMapSettings): MissingAiConfiguration | null {
   const profile = settings.models?.find((item) => item.id === settings.defaultModelProfileId);
+  if (profile?.provider === "codex-app-server") return profile.model.trim() ? null : "model";
   const baseUrl = profile && settings.apiBaseUrl === profile.baseUrl ? profile.baseUrl : settings.apiBaseUrl;
   const apiKey = profile && settings.apiKey === profile.apiKey ? profile.apiKey : settings.apiKey;
   const model = profile && settings.model === profile.model ? profile.model : settings.model;
@@ -199,6 +202,9 @@ function normalizeModelProfile(profile: ModelProfile, index: number, legacy: Mod
       ? normalizeApiBaseUrl(profile.baseUrl)
       : legacy.baseUrl,
     apiKey: cleanString(profile.apiKey),
+    provider: profile.provider === "codex-app-server" ? "codex-app-server" : undefined,
+    codexPath: cleanString(profile.codexPath) || undefined,
+    reasoningEffort: cleanString(profile.reasoningEffort) || undefined,
     apiKeyEnvVar: cleanString(profile.apiKeyEnvVar) || undefined,
     systemPrompt: typeof profile.systemPrompt === "string" ? profile.systemPrompt : undefined,
     temperature: finiteNumber(profile.temperature),

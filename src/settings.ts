@@ -3,6 +3,7 @@ import type BranchChatMapPlugin from "./main";
 import { DEFAULT_EXPORT_DIR } from "./constants";
 import { t } from "./i18n";
 import { OpenAICompatibleProvider, type ApiTestResult } from "./ai/openAICompatibleProvider";
+import { listCodexModels, type CodexModel } from "./ai/codexAppServer";
 import { createDefaultModelProfile, normalizeApiBaseUrl } from "./settingsDefaults";
 import type { ContextMode, ModelProfile, ThinkingParamStyle } from "./types";
 
@@ -12,6 +13,8 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
   private readonly plugin: BranchChatMapPlugin;
   private readonly apiTestResults = new Map<string, ApiTestResult>();
   private readonly availableModels = new Map<string, string[]>();
+  private readonly codexModels = new Map<string, CodexModel[]>();
+  private readonly refreshReasoning = new Map<string, () => void>();
   private readonly attemptedModelFetch = new Set<string>();
   private isTestingProfileId: string | null = null;
   private isLoadingModelsProfileId: string | null = null;
@@ -23,6 +26,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.refreshReasoning.clear();
     const { containerEl } = this;
     const language = this.plugin.settings.language;
     containerEl.empty();
@@ -271,29 +275,83 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
     if (!isDefault) {
       this.addProfileText(profile, "alias", label(language, "名称", "Alias"), label(language, "例如：推理模型", "For example: Reasoning"), undefined, false, card);
     }
-    this.addProfileText(
-      profile,
-      "baseUrl",
-      label(language, "API 地址", "API base URL"),
-      "https://api.openai.com/v1",
-      label(language, "可以填写基础地址或完整的 /chat/completions 地址。", "Accepts the API root or a full /chat/completions URL."),
-      false,
-      card,
-    );
-    this.addProfileText(
-      profile,
-      "apiKey",
-      label(language, "API Key", "API key"),
-      "sk-...",
-      label(language, "留空时会从环境变量读取。", "Leave blank to resolve the key from an environment variable."),
-      true,
-      card,
-    );
+    const isCodex = profile.provider === "codex-app-server";
+    new Setting(card)
+      .setName(label(language, "连接方式", "Connection"))
+      .addDropdown((dropdown) => dropdown
+        .addOption("openai-compatible", label(language, "OpenAI 兼容 API", "OpenAI-compatible API"))
+        .addOption("codex-app-server", "ChatGPT / Codex")
+        .setValue(profile.provider ?? "openai-compatible")
+        .onChange(async (value) => {
+          await this.updateProfile(profile.id, {
+            provider: value === "codex-app-server" ? "codex-app-server" : undefined,
+            ...(value === "codex-app-server" ? { model: "", reasoningEffort: undefined } : {}),
+          });
+          this.availableModels.delete(profile.id);
+          this.codexModels.delete(profile.id);
+          this.attemptedModelFetch.delete(profile.id);
+          this.apiTestResults.delete(profile.id);
+          this.display();
+        }));
+    if (isCodex) {
+      new Setting(card)
+        .setName(label(language, "ChatGPT 账号", "ChatGPT account"))
+        .setDesc(label(language,
+          "使用本机 Codex 登录，无需 API Key，仅支持桌面版。先运行 codex login，再刷新模型。只读沙箱仍可能允许 Codex 原生工具读取本地文件；使用前请查看 README 的连接说明。",
+          "Uses your local Codex login without an API key. Desktop only: run codex login, then refresh models. Native Codex tools may still read local files in a read-only sandbox; see the connection guide before use."));
+      this.addProfileText(profile, "codexPath", label(language, "Codex 可执行文件路径", "Codex executable path"),
+        label(language, "留空自动查找", "Leave blank to detect automatically"), undefined, false, card);
+    } else {
+      this.addProfileText(
+        profile,
+        "baseUrl",
+        label(language, "API 地址", "API base URL"),
+        "https://api.openai.com/v1",
+        label(language, "可以填写基础地址或完整的 /chat/completions 地址。", "Accepts the API root or a full /chat/completions URL."),
+        false,
+        card,
+      );
+      this.addProfileText(
+        profile,
+        "apiKey",
+        label(language, "API Key", "API key"),
+        "sk-...",
+        label(language, "留空时会从环境变量读取。", "Leave blank to resolve the key from an environment variable."),
+        true,
+        card,
+      );
+    }
     this.renderModelPicker(card, profile, language);
+    if (isCodex) {
+      const effortSetting = new Setting(card)
+        .setName(label(language, "推理强度", "Reasoning effort"))
+        .setDesc(label(language, "选项来自当前模型。自动使用 Codex 的模型默认值；摘要显示在对话的思考区域。",
+          "Options come from the selected model. Automatic uses Codex's model default; reasoning summaries appear separately in chat."));
+      const renderEffort = () => {
+        if (!effortSetting.controlEl.isConnected) return;
+        const current = this.plugin.settings.models?.find((entry) => entry.id === profile.id) ?? profile;
+        const model = this.codexModels.get(profile.id)?.find((entry) => entry.model === current.model);
+        effortSetting.controlEl.empty();
+        effortSetting.addDropdown((dropdown) => {
+          dropdown.addOption("", label(language, "自动（模型默认值）", "Automatic (model default)"));
+          for (const option of model?.supportedReasoningEfforts ?? []) {
+            dropdown.addOption(option.reasoningEffort, option.reasoningEffort);
+          }
+          if (current.reasoningEffort && !model?.supportedReasoningEfforts.some((option) => option.reasoningEffort === current.reasoningEffort)) {
+            dropdown.addOption(current.reasoningEffort, `${current.reasoningEffort} (${label(language, "已保存；刷新列表验证", "saved; refresh to verify")})`);
+          }
+          dropdown.setValue(current.reasoningEffort ?? "").onChange(async (value) => {
+            await this.updateProfile(profile.id, { reasoningEffort: value || undefined });
+          });
+        });
+      };
+      this.refreshReasoning.set(profile.id, renderEffort);
+      renderEffort();
+    }
 
     const advanced = card.createEl("details", { cls: "spider-settings-advanced" });
     advanced.createEl("summary", { text: label(language, "高级模型选项", "Advanced model options") });
-    this.addProfileText(
+    if (!isCodex) this.addProfileText(
       profile,
       "apiKeyEnvVar",
       label(language, "环境变量名称", "API key environment variable"),
@@ -313,42 +371,49 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
           .onChange(async (value) => this.updateProfile(profile.id, { systemPrompt: value || undefined }));
       });
 
-    this.addProfileNumber(profile, "temperature", label(language, "温度", "Temperature"), "0–2", advanced);
-    this.addProfileNumber(profile, "maxTokens", label(language, "最大输出 Token", "Maximum output tokens"), "", advanced);
+    if (!isCodex) {
+      this.addProfileNumber(profile, "temperature", label(language, "温度", "Temperature"), "0–2", advanced);
+      this.addProfileNumber(profile, "maxTokens", label(language, "最大输出 Token", "Maximum output tokens"), "", advanced);
 
-    new Setting(advanced)
-      .setName(t(language, "thinkingStyleLabel"))
-      .setDesc(t(language, "thinkingStyleDesc"))
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOption("auto", label(language, "自动（按 API 地址判断）", "Automatic (from the API address)"))
-          .addOption("none", label(language, "不发送", "Send nothing"))
-          .addOption("thinking", '{"thinking": {"type": "enabled|disabled"}}')
-          .addOption("enable_thinking", '{"enable_thinking": true|false}')
-          .addOption("reasoning", '{"reasoning": {"enabled": true|false}}')
-          .setValue(profile.thinkingParamStyle ?? "auto")
-          .onChange(async (value) => {
-            await this.updateProfile(profile.id, {
-              thinkingParamStyle: isThinkingParamStyle(value) ? value : "auto",
+      new Setting(advanced)
+        .setName(t(language, "thinkingStyleLabel"))
+        .setDesc(t(language, "thinkingStyleDesc"))
+        .addDropdown((dropdown) => {
+          dropdown
+            .addOption("auto", label(language, "自动（按 API 地址判断）", "Automatic (from the API address)"))
+            .addOption("none", label(language, "不发送", "Send nothing"))
+            .addOption("thinking", '{"thinking": {"type": "enabled|disabled"}}')
+            .addOption("enable_thinking", '{"enable_thinking": true|false}')
+            .addOption("reasoning", '{"reasoning": {"enabled": true|false}}')
+            .setValue(profile.thinkingParamStyle ?? "auto")
+            .onChange(async (value) => {
+              await this.updateProfile(profile.id, {
+                thinkingParamStyle: isThinkingParamStyle(value) ? value : "auto",
+              });
             });
-          });
-      });
+        });
+    }
 
     const testResult = this.apiTestResults.get(profile.id);
     const testSetting = new Setting(card)
       .setName(label(language, "连接测试", "Connection test"))
-      .setDesc(testResult ? formatApiTestResult(testResult) : label(language, "测试此配置的 API 和模型。", "Test this profile's API endpoint and model."));
+      .setDesc(testResult ? formatApiTestResult(testResult) : isCodex
+        ? label(language, "检查 Codex 登录和模型可用性，不发送生成请求。", "Check Codex login and model availability without generating a response.")
+        : label(language, "测试此配置的 API 和模型。", "Test this profile's API endpoint and model."));
     testSetting.addButton((button) => {
       const testing = this.isTestingProfileId === profile.id;
       button
-        .setButtonText(testing ? t(language, "apiTesting") : t(language, "apiTest"))
+        .setButtonText(testing ? t(language, "apiTesting") : isCodex
+          ? label(language, "检查连接", "Check connection") : t(language, "apiTest"))
         .setDisabled(testing)
         .onClick(async () => {
           this.isTestingProfileId = profile.id;
           this.apiTestResults.delete(profile.id);
           this.display();
           try {
-            const resolved = await this.plugin.resolveProfileForRequest(profile.id);
+            const resolved = isCodex
+              ? { profile: this.plugin.settings.models?.find((entry) => entry.id === profile.id) ?? profile }
+              : await this.plugin.resolveProfileForRequest(profile.id);
             const provider = new OpenAICompatibleProvider(this.plugin.settings);
             this.apiTestResults.set(profile.id, await provider.testConnection(resolved.profile));
           } catch (error: unknown) {
@@ -410,7 +475,8 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
       close();
       if (model !== savedModel) {
         savedModel = model;
-        void this.updateProfile(profile.id, { model });
+        void this.updateProfile(profile.id, { model, ...(profile.provider === "codex-app-server" ? { reasoningEffort: undefined } : {}) })
+          .then(() => this.refreshReasoning.get(profile.id)?.());
       }
     };
     const render = () => {
@@ -449,9 +515,18 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
       refreshButton.textContent = label(language, "获取中…", "Loading…");
       render();
       try {
-        const resolved = await this.plugin.resolveProfileForRequest(profile.id);
-        const provider = new OpenAICompatibleProvider(this.plugin.settings);
-        const models = await provider.listModels(resolved.profile);
+        let models: string[];
+        if (profile.provider === "codex-app-server") {
+          const current = this.plugin.settings.models?.find((entry) => entry.id === profile.id) ?? profile;
+          const catalog = await listCodexModels(current);
+          this.codexModels.set(profile.id, catalog);
+          models = catalog.map((entry) => entry.model);
+          this.refreshReasoning.get(profile.id)?.();
+        } else {
+          const resolved = await this.plugin.resolveProfileForRequest(profile.id);
+          const provider = new OpenAICompatibleProvider(this.plugin.settings);
+          models = await provider.listModels(resolved.profile);
+        }
         this.availableModels.set(profile.id, models);
         if (models.length === 0) new Notice(label(language, "服务未返回模型列表，可手动输入模型 ID。", "No models returned; you can enter an ID manually."));
       } catch (error: unknown) {
@@ -532,7 +607,7 @@ export class BranchChatMapSettingTab extends PluginSettingTab {
 
   private addProfileText(
     profile: ModelProfile,
-    key: "alias" | "baseUrl" | "apiKey" | "apiKeyEnvVar",
+    key: "alias" | "baseUrl" | "apiKey" | "apiKeyEnvVar" | "codexPath",
     name: string,
     placeholder: string,
     desc?: string,

@@ -13,6 +13,11 @@ export interface ModelProfile {
   model: string;
   baseUrl: string;
   apiKey: string;
+  /** Omitted in existing profiles: OpenAI-compatible HTTP API. */
+  provider?: "openai-compatible" | "codex-app-server";
+  codexPath?: string;
+  /** Exact effort from Codex model/list; undefined keeps the model default. */
+  reasoningEffort?: string;
   apiKeyEnvVar?: string;
   systemPrompt?: string;
   temperature?: number;
@@ -46,7 +51,7 @@ export interface ChatMessage {
   modelSnapshot?: ModelSnapshot;
   state?: "complete" | "stopped";
   /**
-   * Chain-of-thought text from reasoning models. It stays out of the answer, out of
+   * Provider-supplied reasoning text or summary. It stays out of the answer, out of
    * the request messages, and out of exports; the chat panel renders it collapsed.
    */
   reasoning?: string;

@@ -88,7 +88,6 @@ export type TranslationKey =
   | "apiRequestFailedShort"
   | "missingApiBaseUrl"
   | "missingApiKey"
-  | "apiKeyLooksLikeUrl"
   | "missingModel"
   | "aiRequestFailed"
   | "emptyAiResponse"
@@ -274,7 +273,6 @@ const zh: TranslationDictionary = {
   apiRequestFailedShort: "AI 请求失败（{status}）。",
   missingApiBaseUrl: "缺少 API 地址。请在 Spider Chat 设置里填写。",
   missingApiKey: "缺少 API Key。请在 Spider Chat 设置里填写。",
-  apiKeyLooksLikeUrl: "API Key 一栏填入了网址。请把网址填在 API 地址，并在 API Key 中填入服务商生成的密钥。",
   missingModel: "缺少模型名称。请在 Spider Chat 设置里填写。",
   aiRequestFailed: "AI 请求失败（{status}）。{body}",
   emptyAiResponse: "AI 返回为空。",
@@ -362,7 +360,7 @@ const zh: TranslationDictionary = {
   settingTabName: "使用 Tab 创建分支",
   settingTabDesc: "聚焦图谱画布时，Tab 会创建分支；在 AI 回复中选中文字后按 Tab，会从该文本创建分支。",
   settingStreamName: "流式输出",
-  settingStreamDesc: "桌面端边生成边显示；移动端完成后显示，以兼容更多 API。",
+  settingStreamDesc: "开启后 AI 回复会边生成边显示。",
   settingAutoSummaryName: "自动总结节点",
   settingAutoSummaryDesc: "每次 AI 回复后生成一句简短节点总结。",
   settingOnboardingName: "新手引导卡片",
@@ -459,7 +457,6 @@ const en: TranslationDictionary = {
   apiRequestFailedShort: "AI request failed ({status}).",
   missingApiBaseUrl: "Missing API base URL. Add one in Spider Chat settings.",
   missingApiKey: "Missing API key. Add one in Spider Chat settings.",
-  apiKeyLooksLikeUrl: "The API key field contains a web address. Put the address in API base URL and enter the provider-issued key in API key.",
   missingModel: "Missing model. Add one in Spider Chat settings.",
   aiRequestFailed: "AI request failed ({status}). {body}",
   emptyAiResponse: "AI response was empty.",
@@ -547,7 +544,7 @@ const en: TranslationDictionary = {
   settingTabName: "Use Tab to create branches",
   settingTabDesc: "When the map canvas is focused, Tab creates a branch. Selecting text in an AI response and pressing Tab branches from that text.",
   settingStreamName: "Stream responses",
-  settingStreamDesc: "Show responses as they arrive on desktop. On mobile, show the complete response for API compatibility.",
+  settingStreamDesc: "Show AI responses as they are generated.",
   settingAutoSummaryName: "Auto-summarize nodes",
   settingAutoSummaryDesc: "Generate a short summary after each AI response.",
   settingOnboardingName: "Onboarding guide cards",

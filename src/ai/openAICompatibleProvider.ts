@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { Platform, requestUrl } from "obsidian";
 import type { AiChatRequest, AiProvider, AppLanguage, BranchChatMapSettings, ChatMessage, ChatNode, ModelProfile } from "../types";
 import { normalizeApiBaseUrl, resolveThinkingStyle } from "../settingsDefaults";
 import { t } from "../i18n";
@@ -254,6 +254,13 @@ export class OpenAICompatibleProvider implements AiProvider {
   }
 
   async *streamChat(request: AiChatRequest): AsyncGenerator<string> {
+    // Obsidian's native requestUrl works on mobile without browser CORS, but
+    // cannot expose response chunks. Use the same non-streaming request path as
+    // connection tests there so a successful test also means chats can work.
+    if (Platform.isMobile && request.profile?.provider !== "codex-app-server") {
+      yield await this.chat(request);
+      return;
+    }
     yield* this.requestChatCompletionStream(
       buildMessages(request, this.settings),
       request.model,
@@ -371,6 +378,9 @@ export class OpenAICompatibleProvider implements AiProvider {
     if (!config.apiKey) {
       throw new AiRequestError(t(this.settings.language, "missingApiKey"));
     }
+    if (looksLikeWebAddress(config.apiKey)) {
+      throw new AiRequestError(t(this.settings.language, "apiKeyLooksLikeUrl"));
+    }
 
     const response = await requestUrl({
       url: `${config.baseUrl}/models`,
@@ -406,6 +416,9 @@ export class OpenAICompatibleProvider implements AiProvider {
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
       throw new AiRequestError(t(this.settings.language, "missingApiKey"));
+    }
+    if (looksLikeWebAddress(config.apiKey)) {
+      throw new AiRequestError(t(this.settings.language, "apiKeyLooksLikeUrl"));
     }
 
     if (!config.model) {
@@ -479,6 +492,9 @@ export class OpenAICompatibleProvider implements AiProvider {
     const config = this.getRequestConfig(model, profile);
     if (!config.apiKey) {
       throw new AiRequestError(t(this.settings.language, "missingApiKey"));
+    }
+    if (looksLikeWebAddress(config.apiKey)) {
+      throw new AiRequestError(t(this.settings.language, "apiKeyLooksLikeUrl"));
     }
 
     if (!config.model) {
@@ -654,12 +670,21 @@ function validateSettings(settings: BranchChatMapSettings, profile?: ModelProfil
   if (!(profile?.apiKey ?? settings.apiKey).trim()) {
     return { ok: false, message: t(settings.language, "missingApiKey") };
   }
+  if (looksLikeWebAddress(profile?.apiKey ?? settings.apiKey)) {
+    return { ok: false, message: t(settings.language, "apiKeyLooksLikeUrl") };
+  }
 
   if (!(profile?.model ?? settings.model).trim()) {
     return { ok: false, message: t(settings.language, "missingModel") };
   }
 
   return null;
+}
+
+function looksLikeWebAddress(value: string): boolean {
+  const candidate = value.trim();
+  return /^https?:\/\//i.test(candidate)
+    || /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:[/:?#]|$)/i.test(candidate);
 }
 
 function isModelProfile(value: ModelProfile | AbortSignal | undefined): value is ModelProfile {

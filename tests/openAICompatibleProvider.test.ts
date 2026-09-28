@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Platform, requestUrl } from "obsidian";
 import { OpenAICompatibleProvider } from "../src/ai/openAICompatibleProvider";
 import { createMessage, createNode } from "../src/domain/chatMap";
 import type { BranchChatMapSettings } from "../src/types";
@@ -68,6 +69,47 @@ describe("OpenAICompatibleProvider", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("API Key");
     expect(result.details).toContain("401");
+  });
+
+  it("rejects a web address pasted into the API key field before sending it", async () => {
+    const mockedRequestUrl = vi.mocked(requestUrl);
+    mockedRequestUrl.mockClear();
+    const profile = { id: "wrong-key", alias: "DeepSeek", baseUrl: "https://api.deepseek.com", apiKey: "https://api.deepseek.com", model: "deepseek-flash" };
+    const provider = new OpenAICompatibleProvider(settings);
+
+    const test = await provider.testConnection(profile);
+    expect(test.ok).toBe(false);
+    expect(test.message).toContain("API Key 一栏填入了网址");
+    await expect(provider.listModels(profile)).rejects.toThrow("API Key 一栏填入了网址");
+    expect(mockedRequestUrl).not.toHaveBeenCalled();
+  });
+
+  it("uses Obsidian's native non-streaming request on mobile", async () => {
+    const mockedRequestUrl = vi.mocked(requestUrl);
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: "",
+      json: { choices: [{ message: { content: "mobile answer" } }] },
+      arrayBuffer: new ArrayBuffer(0),
+      headers: {},
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    Platform.isMobile = true;
+    try {
+      const provider = new OpenAICompatibleProvider(settings);
+      const node = createNode({ title: "Mobile", messages: [createMessage("user", "hello")] });
+      const chunks: string[] = [];
+      for await (const chunk of provider.streamChat({ node, model: settings.model, includeParentContext: false })) {
+        chunks.push(chunk);
+      }
+      expect(chunks).toEqual(["mobile answer"]);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      Platform.isMobile = false;
+      vi.unstubAllGlobals();
+    }
   });
 
   it("validates missing model before testing API", async () => {

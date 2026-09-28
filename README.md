@@ -29,7 +29,9 @@ These are workflow choices, not a claim to contain every feature of both project
 
 ## Install and start
 
-Spider Chat has its own plugin ID, `spider-chat`, and **is not currently listed in Obsidian's Community Plugins directory**. Build from source:
+Spider Chat has its own plugin ID, `spider-chat`, and **is not currently listed in Obsidian's Community Plugins directory**. Download `main.js`, `styles.css`, and `manifest.json` from the [latest GitHub release](https://github.com/liubaiqing/spider-chat/releases/latest), then copy them into `<vault>/.obsidian/plugins/spider-chat/`. Restart Obsidian and enable Spider Chat in Settings → Community plugins. Obsidian 1.8.7 or later is required.
+
+To build from source instead:
 
 ~~~bash
 git clone https://github.com/liubaiqing/spider-chat.git
@@ -38,7 +40,7 @@ npm ci
 npm run build
 ~~~
 
-Copy the generated `main.js` and `styles.css`, plus `manifest.json`, into `<vault>/.obsidian/plugins/spider-chat/`. Restart Obsidian and enable Spider Chat in Settings → Community plugins. Obsidian 1.8.7 or later is required.
+Copy the generated `main.js` and `styles.css`, plus `manifest.json`, into the same plugin directory.
 
 **ChatGPT account (desktop):** In model settings, select **ChatGPT / Codex** to use
 your local `codex login` session without an API key. Refresh the model list, choose

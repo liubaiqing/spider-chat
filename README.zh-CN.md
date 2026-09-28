@@ -35,7 +35,9 @@ Spider Chat 以 [Spider](https://github.com/111pointer111/spider) 为底座，�
 
 ## 安装与首次使用
 
-Spider Chat 使用独立插件 ID `spider-chat`，**目前尚未上架 Obsidian 社区插件市场**。请从源码构建：
+Spider Chat 使用独立插件 ID `spider-chat`，**目前尚未上架 Obsidian 社区插件市场**。从[最新 GitHub Release](https://github.com/liubaiqing/spider-chat/releases/latest) 下载 `main.js`、`styles.css` 和 `manifest.json`，放到笔记库的 `<vault>/.obsidian/plugins/spider-chat/`。重启 Obsidian，在「设置 → 第三方插件」中启用 Spider Chat。最低 Obsidian 版本为 1.8.7。
+
+也可以从源码构建：
 
 ~~~bash
 git clone https://github.com/liubaiqing/spider-chat.git
@@ -44,7 +46,7 @@ npm ci
 npm run build
 ~~~
 
-将生成的 `main.js`、`styles.css` 和仓库中的 `manifest.json` 复制到笔记库的 `<vault>/.obsidian/plugins/spider-chat/`，然后重启 Obsidian，在「设置 → 第三方插件」中启用 Spider Chat。最低 Obsidian 版本为 1.8.7。
+将生成的 `main.js`、`styles.css` 和仓库中的 `manifest.json` 复制到同一插件目录。
 
 1. 在「设置 → Spider Chat」配置默认模型的 API 地址、密钥和模型名称。支持 OpenAI 兼容的 Chat Completions 端点；也可从插件目录或笔记库中的 `.env` 读取密钥。
 2. 点击左侧功能区图标新建图谱，提出第一个问题。
